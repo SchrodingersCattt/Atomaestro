@@ -271,6 +271,10 @@ def render_batch_if_selected(
                 "--surface-material",
                 getattr(args, "surface_material", None) not in {None, "matte"},
             ),
+            (
+                "--isosurface-density-mask",
+                bool(getattr(args, "isosurface_density_mask", False)),
+            ),
         )
         if present
     ]

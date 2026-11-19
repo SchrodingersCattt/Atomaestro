@@ -35,6 +35,22 @@ isosurfaces, and any multi-panel comparison of scalar fields.
    `--surface-material hard_plastic`, `metal_like`, or `glass_like` is CPU-only.
    Plotly and GPU reject those presets. `glass_like` is a Fresnel rim on the
    CPU PNG, not on `build_cube_figure`.
+- `mat-vis render` does not close the scalar grid across cell faces.
+  `--periodic-isosurface` is rejected. Record closure as off for that command.
+  The legacy Plotly trace path can still close a grid when
+  `build_cube_figure(..., periodic=True)` is requested explicitly.
+
+## Required rendering workflow
+
+1. Render every cube as a separate MatterVis image.
+2. Set a common value with `--isovalue VALUE` for comparable fields. Use
+  `--isosurface-opacity VALUE` when that choice is scientifically intended.
+  Do not pass `--periodic-isosurface`; `mat-vis render` rejects it.
+  For an RDG or IRI figure, `--isosurface-density-mask` is optional and off
+  by default. It needs a density cube and a cutoff you supply in e/Bohr³.
+  0.05 is not a default and is not shared across descriptors. State the mask
+  and cutoff in the caption when you turn it on. Leave it off for orbitals,
+  electron density, and a standard IRI figure.
 3. Static CLI output excludes interaction-only traces. Programmatic Plotly
   exports must pass `include_interaction_traces=False`; interactive HTML may
   retain `atom-selection`, `bond-selection`, and `disorder-preview-outline`.
@@ -66,8 +82,10 @@ A successful render call is not acceptance. Before delivery:
   resampling occurred.
 
 The final delivery record must include the camera axis, screen-up, orthographic
-or perspective projection, explicit isovalue, opacity, sign colors, periodic
-closure policy, grid dimensions, backend, and objective plus visual QA status.
+or perspective projection, explicit isovalue, opacity, sign colors, that
+`mat-vis render` did not close the scalar grid, any density mask and its
+cutoff in e/Bohr³, grid dimensions, backend, and objective plus visual QA
+status.
 
 ## Molecular completeness in periodic cells
 

@@ -367,6 +367,11 @@ substitutes one frame backend for another.
 | --isosurface-shininess VALUE | 32 | Highlight exponent, at least 1 |
 | --periodic-isosurface / --no-periodic-isosurface | off | Enable or disable scalar closure across cell faces |
 | --lighting RIG | studio_soft | CPU rig: `studio_soft` (default, not retuned), `unlit`, or `studio_three_point` (CPU error, not a silent substitute). See [Lighting](#lighting) |
+| --isosurface-density-mask | off | Opt-in high-density ceiling. Requires a density cube and a user cutoff. Does not change orbital or electron-density isosurfaces when omitted |
+| --isosurface-density-cube PATH | ignored | Electron-density cube sampled at isosurface vertices only when the mask is on. Scalar values are e/Bohr³; e/Å³ is not converted |
+| --isosurface-density-cutoff VALUE | none | User ρ_cut > 0 in e/Bohr³. Not chosen automatically and not defaulted to 0.05 |
+| --periodic-isosurface | rejected | `mat-vis render` does not close the scalar grid across cell faces |
+| --no-periodic-isosurface | off | Records that CPU meshes omit cell-face closure |
 
 Static exports omit browser-only picking traces. Interactive HTML retains them.
 For comparable cube panels, pass the same explicit `--isovalue` rather than
@@ -396,6 +401,23 @@ mat-vis render structure.cif -o metal-like.png --backend cpu --renderer general 
 mat-vis render orbital.cube -o glass.png --backend cpu --renderer general \
   --surface-material glass_like --isosurface-opacity 0.55
 ```
+`--isosurface-density-mask` is off unless you set it. Omitting it leaves
+orbital and electron-density isosurfaces unchanged, even when a density cube
+and a cutoff are also present. The cutoff is in the density cube's scalar
+values. For electron density those values are atomic units, e/Bohr³
+(1 a.u. ≈ 6.748 e/Å³, so 0.05 a.u. ≈ 0.337 e/Å³). The command does not
+convert e/Å³ and does not choose ρ_cut. 0.05 a.u. is a starting point some
+NCI/RDG figures use for weak contacts. It is not a default, not an IRI
+setting, and not a value to copy from a DFT convention onto a promolecular
+field or from one descriptor onto another. Do not take it from a geometric
+bond-midpoint density. State the mask and the cutoff in the figure caption.
+Details and the promolecular cyclic-dimer check are in
+[the cube API](agents/cube_api.md#density-mask).
+
+`--periodic-isosurface` is an error on this command. CPU meshes do not close
+the scalar grid across cell faces. `--no-periodic-isosurface` matches that
+behavior. Style keys `isosurface_atom_mask_radius` and
+`isosurface_min_volume_voxels` are not flags and are not applied here.
 
 ### Camera
 

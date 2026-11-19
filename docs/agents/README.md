@@ -68,6 +68,7 @@ The same routing as a quick table:
 | Shade a cube isosurface with one shared material | [`cube_api.md`](cube_api.md#isosurface-material) |
 | Write one offscreen PyVista PNG of a cube isosurface | [`cube_api.md`](cube_api.md#vtk-offscreen-figures) |
 | Clip displayed cube geometry to the primitive cell (experimental PyVista entry today) | [`cube_api.md`](cube_api.md#cell-boundary-policy) |
+| Hide high-density regions of an interaction isosurface with an opt-in density ceiling | [`cube_api.md`](cube_api.md#density-mask) |
 | Render ORTEP / thermal ellipsoid figures | [`ortep_api.md`](ortep_api.md) |
 | Color atoms by charge, velocity, stress, or another per-atom field | [`atom_property_coloring.md`](atom_property_coloring.md) |
 | Add a/b/c (or x/y/z, k-path, dipole) direction indicators to any 3D plot | [`compass_api.md`](compass_api.md) |

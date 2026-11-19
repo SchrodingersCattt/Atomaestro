@@ -107,6 +107,57 @@ def _axes(value: np.ndarray, name: str) -> np.ndarray:
     return array
 
 
+def sample_cube_at_mesh_indices(
+    source: CubeData,
+    other: CubeData,
+    mesh_indices: np.ndarray,
+    *,
+    stride: int,
+    role: str,
+) -> np.ndarray:
+    """Sample ``other`` at strided marching-cubes indices of ``source``.
+
+    ``mesh_indices`` are in the index space of ``source.values[::stride]``.
+    Physical position is ``source.origin + full_index @ source.axes``. The
+    sample is trilinear on the full-resolution ``other`` grid at the index
+    implied by that cube's own origin and voxel axes. Array shape is not a
+    grid identity. Vertices outside that grid, or axes that are not a
+    usable Cartesian frame, are an error. ``read_cube`` stores coordinates
+    in angstroms and does not convert a Bohr grid into that frame.
+    """
+    label = f"isosurface {role} cube"
+    points = np.asarray(mesh_indices, dtype=float)
+    if points.size == 0:
+        return np.empty(0, dtype=float)
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError("mesh vertices must have shape (N, 3)")
+    values = np.asarray(other.values, dtype=float)
+    if values.ndim != 3:
+        raise ValueError(f"{label} values must be a 3-D grid")
+    full_index = points * float(stride)
+    source_origin = _vector(source.origin, "source cube origin")
+    source_axes = _axes(source.axes, "source cube axes")
+    lab = source_origin + full_index @ source_axes
+    other_origin = _vector(other.origin, f"{role} cube origin")
+    other_axes = _axes(other.axes, f"{role} cube axes")
+    determinant = float(np.linalg.det(other_axes))
+    if not np.isfinite(determinant) or abs(determinant) < _SINGULAR_AXIS_DETERMINANT:
+        raise ValueError(f"{label} axes are singular")
+    other_index = (lab - other_origin) @ np.linalg.inv(other_axes)
+    maximum = np.asarray(values.shape, dtype=float) - 1.0
+    outside = (other_index < -COLOR_SAMPLE_INDEX_TOLERANCE) | (
+        other_index > maximum + COLOR_SAMPLE_INDEX_TOLERANCE
+    )
+    if np.any(outside):
+        raise ValueError(
+            f"{label} does not cover the surface; compare its origin, voxel "
+            "axes, and shape with the source grid. Both cubes must share one "
+            "Cartesian frame. read_cube stores coordinates in angstroms and "
+            "does not convert a Bohr grid into that frame."
+        )
+    return _sample_trilinear(values, other_index)
+
+
 def sample_color_cube(
     source: CubeData,
     color: CubeData,
@@ -253,13 +304,29 @@ def isosurface_preparation_token(
     colormap: str,
     smooth: bool = False,
     smooth_iterations: int = TAUBIN_ITERATIONS,
+    density_mask: bool = False,
+    density_cube: CubeData | None = None,
+    density_cutoff: float | None = None,
 ) -> str:
     """Identity of one prepared isosurface, including the color grid.
 
     ``smooth`` defaults to false. Omitting it is the raw marching-cubes
     mesh. Pass ``smooth=True`` for the Taubin publication mesh. When
     smoothing is off, the iteration count is not part of the identity.
+    A density cube and cutoff change the identity only when the density
+    mask is on, so a stored cube cannot keep a history of unused ceilings.
     """
+    if density_mask:
+        if density_cube is None or density_cutoff is None:
+            raise ValueError(
+                "density mask identity requires a density cube and a cutoff"
+            )
+        density_identity: tuple[str, float] | None = (
+            _grid_digest(density_cube),
+            float(density_cutoff),
+        )
+    else:
+        density_identity = None
     payload = (
         _grid_digest(cube),
         None if color_cube is None else _grid_digest(color_cube),
@@ -279,6 +346,7 @@ def isosurface_preparation_token(
         else (float(color_range[0]), float(color_range[1])),
         None if color_center is None else float(color_center),
         str(colormap),
+        density_identity,
     )
     return sha256(repr(payload).encode("utf-8")).hexdigest()
 
@@ -289,5 +357,6 @@ __all__ = [
     "isosurface_preparation_token",
     "resolve_color_range",
     "sample_color_cube",
+    "sample_cube_at_mesh_indices",
     "vertex_colors_for_surface",
 ]

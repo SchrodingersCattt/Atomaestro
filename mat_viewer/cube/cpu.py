@@ -15,6 +15,7 @@ from ..render.isosurface_material import (
     resolve_isosurface_material,
 )
 from .color_field import isosurface_preparation_token, vertex_colors_for_surface
+from .density_mask import filter_mesh_by_density, resolve_density_mask
 from .io import CubeData, default_isovalue
 from .smooth import (
     TAUBIN_ITERATIONS,
@@ -45,6 +46,9 @@ def cube_isosurface_meshes(
     colormap: str = "bgr",
     smooth: bool = False,
     smooth_iterations: int = TAUBIN_ITERATIONS,
+    density_mask: bool = False,
+    density_cube: CubeData | None = None,
+    density_cutoff: float | None = None,
 ) -> list[dict[str, Any]]:
     """Extract positive/negative phases as separate world-space meshes.
 
@@ -54,6 +58,13 @@ def cube_isosurface_meshes(
     is extracted: it does not change which voxels are inside the surface.
     Each phase is smoothed on its own. Vertices on the cube-box boundary
     stay pinned. A second cube's colors are resampled after the vertices move.
+
+    ``density_mask`` is off unless set. While it is off, ``density_cube`` and
+    ``density_cutoff`` are ignored, including when both are present. When it
+    is on, both are required. Triangles with any vertex density above the
+    cutoff are dropped after marching cubes and after smoothing. The field,
+    density, and colour cubes are not rewritten, and the colour range is not
+    taken from the vertices that remain. The cutoff is not chosen here.
     """
     try:
         from skimage.measure import marching_cubes
@@ -87,6 +98,11 @@ def cube_isosurface_meshes(
     if int(smooth_iterations) != smooth_iterations or int(smooth_iterations) < 0:
         raise ValueError("isosurface smooth iterations must be a non-negative integer")
     smooth_iterations = int(smooth_iterations)
+    active_mask = resolve_density_mask(
+        enabled=density_mask,
+        density_cube=density_cube,
+        density_cutoff=density_cutoff,
+    )
     basis = np.asarray(cube.axes, dtype=float) * stride
     inverse_normal = np.linalg.inv(basis).T
     meshes: list[dict[str, Any]] = []
@@ -96,6 +112,8 @@ def cube_isosurface_meshes(
     )
     minimum = float(np.min(values))
     maximum = float(np.max(values))
+    crossed = False
+    removed_by_mask = False
     for level, color, semantic_id in phases:
         if not minimum < level < maximum:
             continue
@@ -103,6 +121,7 @@ def cube_isosurface_meshes(
             vertices, faces, normals, _ = marching_cubes(values, level=level)
         except (RuntimeError, ValueError):
             continue
+        crossed = True
         # Cube atom coordinates are normalized by cube_to_raw_atoms into the scene frame.
         # Keep CPU isosurfaces in that same frame when cube.origin is nonzero.
         world_vertices = vertices @ basis
@@ -160,8 +179,45 @@ def cube_isosurface_meshes(
                 color_center=color_center,
                 colormap=colormap,
             )
+        triangles = np.asarray(mesh["triangles"], dtype=np.int64)
+        metadata = mesh["metadata"]
+        vertex_colors = mesh.get("vertex_colors")
+        if active_mask is not None:
+            masked_density, cutoff = active_mask
+            filtered = filter_mesh_by_density(
+                cube,
+                masked_density,
+                vertices,
+                triangles,
+                (world_vertices, world_normals, vertex_colors),
+                stride=stride,
+                cutoff=cutoff,
+            )
+            if filtered is None:
+                removed_by_mask = True
+                continue
+            triangles, (world_vertices, world_normals, vertex_colors) = filtered
+            metadata = dict(metadata)
+            metadata["density_mask"] = {
+                "cutoff_e_per_bohr3": float(cutoff),
+                "rule": "drop triangles with any vertex density above the cutoff",
+            }
+            mesh["triangles"] = triangles
+            mesh["vertices"] = world_vertices
+            mesh["normals"] = world_normals
+            mesh["metadata"] = metadata
+            if vertex_colors is None:
+                mesh.pop("vertex_colors", None)
+            else:
+                mesh["vertex_colors"] = vertex_colors
         meshes.append(mesh)
     if not meshes:
+        if active_mask is not None and crossed and removed_by_mask:
+            cutoff = active_mask[1]
+            raise ValueError(
+                "density mask removed every triangle at cutoff "
+                f"{cutoff:g} e/Bohr^3; no replacement cutoff was chosen"
+            )
         raise ValueError(f"Cube has no surface crossing isovalue {iso:g}")
     return meshes
 
@@ -298,12 +354,17 @@ def ensure_cube_isosurfaces(
     color_range: tuple[float, float] | None = None,
     color_center: float | None = None,
     colormap: str = "bgr",
+    density_mask: bool = False,
+    density_cube: CubeData | None = None,
+    density_cutoff: float | None = None,
 ) -> Any:
     """Attach backend-neutral isosurfaces to every Cube scene in ``source``.
 
     Meshes are reused only when the source grid and the isovalue, stride,
-    material, and color-cube settings still match. A later call with a color
-    cube replaces an uncolored cache.
+    material, color-cube, and active density-mask settings still match. A
+    later call replaces the one stored mesh list. Cutoff values are not
+    accumulated, and a density cube is not part of the identity while the
+    mask is off.
     """
     bundles: list[Any] = []
     if hasattr(source, "frames"):
@@ -347,6 +408,9 @@ def ensure_cube_isosurfaces(
             color_range=color_range,
             color_center=color_center,
             colormap=colormap,
+            density_mask=density_mask,
+            density_cube=density_cube,
+            density_cutoff=density_cutoff,
         )
         cached = scene.get("isosurfaces") if isinstance(scene, dict) else None
         cached_token = (
@@ -380,6 +444,9 @@ def ensure_cube_isosurfaces(
             color_range=color_range,
             color_center=color_center,
             colormap=colormap,
+            density_mask=density_mask,
+            density_cube=density_cube,
+            density_cutoff=density_cutoff,
         )
         cube.surface_meshes = meshes
         if isinstance(scene, dict):

@@ -64,6 +64,7 @@ The same routing as a quick table:
 | Build a static cube/orbital figure (HOMO, LUMO, density) | [`cube_api.md`](cube_api.md) |
 | Choose a Blinn–Phong surface preset (`matte`, `hard_plastic`, `metal_like`, `glass_like`) for CPU atoms, bonds, and isosurfaces | [`surface_material.md`](surface_material.md) |
 | Render cube isosurfaces as complete triangulated wireframes | [`cube_api.md`](cube_api.md#isosurface-wireframe) |
+| Frame a cube isosurface on the molecule and mesh, not the grid | [`cube_api.md`](cube_api.md#auto-view) |
 | Color a cube isosurface from a second scalar cube | [`cube_api.md`](cube_api.md#isosurface-color) |
 | Shade a cube isosurface with one shared material | [`cube_api.md`](cube_api.md#isosurface-material) |
 | Write one offscreen PyVista PNG of a cube isosurface | [`cube_api.md`](cube_api.md#vtk-offscreen-figures) |

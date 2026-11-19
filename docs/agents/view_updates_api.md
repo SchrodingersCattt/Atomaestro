@@ -69,6 +69,10 @@ Closing a scene and undoing that close reuses the scene id and can reuse
 the render revision, camera revision, and `uirevision`; the new generation
 still makes that frame current. A repeat of the same generation is the
 duplicate that is not rebuilt.
+The browser also appends each complete-frame decision to the hidden
+`#mv-frame-witness` text element. That record is the applied or rejected
+frame's identity, camera, and coordinate counts. It does not change the
+frame that is painted.
 
 The same journal also carries scene-list envelopes:
 

@@ -2546,6 +2546,24 @@
     inspector.style.left = (Number(x) + 10) + "px";
     inspector.style.top = (Number(y) + 10) + "px";
   }
+  let selectionAttemptToken=0;
+  function currentSceneGeneration(){
+    const gd=graphDiv();
+    const render=renderMetadataFromLayout(gd && gd.layout);
+    if(!render || render.scene_generation===undefined || render.scene_generation===null || render.scene_generation==="") return "";
+    return String(render.scene_generation);
+  }
+  function selectionAttemptCurrent(token, scene, generation){
+    if(token!==selectionAttemptToken) return false;
+    if(String(scene||"")!==String(currentSceneId()||"")) return false;
+    if(String(generation||"")!==currentSceneGeneration()) return false;
+    return true;
+  }
+  window.MatterVisSelectionFence={
+    current: selectionAttemptCurrent,
+    sceneGeneration: currentSceneGeneration,
+    bump: function(){ selectionAttemptToken+=1; return selectionAttemptToken; },
+  };
   function bindRightClick() {
     const container = document.getElementById("crystal-graph");
     const inner = container && container.querySelector(".js-plotly-plot");
@@ -2624,7 +2642,8 @@
       if(e.button===2){secondary={x:e.clientX,y:e.clientY,scene:currentSceneId(),moved:false};pendingContext=false;return;}
       secondary=null;pendingContext=false;
       if(e.button!==0) return;
-      down={x:e.clientX,y:e.clientY,scene:currentSceneId(),moved:false};
+      selectionAttemptToken+=1;
+      down={x:e.clientX,y:e.clientY,scene:currentSceneId(),generation:currentSceneGeneration(),attempt:selectionAttemptToken,moved:false};
     },{passive:true});
     function publishWhenGutterReady(target, mode) {
       const opening = mode !== "clear" && !!target;
@@ -2633,14 +2652,21 @@
       if (!dock || typeof dock.afterGutter !== "function") { run(); return; }
       dock.afterGutter(opening, run);
     }
-    function select(e){
+    function select(e, gesture){
       const mode=e.ctrlKey||e.metaKey?"toggle":e.shiftKey?"add":"replace";
       const started=Date.now();
       // A selection edit rebuilds the figure. While that frame is still
       // landing, the same pixel can miss and must not wipe the set. The
       // bound waits out that in-progress frame; it is not the caller's
-      // settle timeout.
+      // settle timeout. The wait belongs to the scene and generation
+      // captured with the pointer. A newer pointer, a scene change, or a
+      // new scene generation cancels it. The graph generation that ticks
+      // while the frame settles does not.
       const FRAME_SETTLE_MS=15000;
+      if(!gesture || !gesture.attempt) selectionAttemptToken+=1;
+      const token=gesture && gesture.attempt ? gesture.attempt : selectionAttemptToken;
+      const scene=gesture && gesture.scene!==undefined && gesture.scene!==null ? gesture.scene : currentSceneId();
+      const generation=gesture && gesture.generation!==undefined && gesture.generation!==null ? gesture.generation : currentSceneGeneration();
       function apply(target){
         publishWhenGutterReady(target, target?mode:"clear");
       }
@@ -2651,6 +2677,7 @@
         return !!(node && !node.hidden);
       }
       function attempt(){
+        if(!selectionAttemptCurrent(token, scene, generation)) return;
         const gd=graphDiv();
         const indexed=gd && window.MatterVisScenePicking && window.MatterVisScenePicking.index
           ? window.MatterVisScenePicking.index(gd) : null;
@@ -2661,6 +2688,7 @@
           requestAnimationFrame(attempt);
           return;
         }
+        if(!selectionAttemptCurrent(token, scene, generation)) return;
         // Empty space clears only a plain click. Shift/Ctrl keep the set
         // when the pointer is not on a target. An unready index does not clear.
         if(!unready && mode==="replace") apply(null);
@@ -2676,7 +2704,7 @@
           gesture.scene!==currentSceneId()) return;
       // The plot node can be replaced between pointerdown and pointerup.
       // The scene is unchanged, so the click still belongs to this gesture.
-      select(e);
+      select(e, gesture);
     });
     container.addEventListener("pointercancel",function(){down=null;secondary=null;pendingContext=false;invalidateSemanticHover();paint();});
     container.addEventListener("click",function(e){

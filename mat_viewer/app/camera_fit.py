@@ -178,6 +178,116 @@ def _append_sphere(points, center, radius, camera, ranges, aspectratio, projecti
     points.extend(_sphere_shell(center, radius, camera, ranges, aspectratio, projection))
 
 
+def _clip_segment_to_ranges(start: np.ndarray, end: np.ndarray, ranges):
+    """Return the portion of a stick that lies inside the axis box.
+
+    The mesh is clipped there. A replica past the box is not painted, so
+    Fit must frame the clipped end rather than the replica itself.
+    """
+
+    if ranges is None:
+        return start, end
+    delta = end - start
+    t0 = 0.0
+    t1 = 1.0
+    for index, pair in enumerate(ranges):
+        lo = float(pair[0])
+        hi = float(pair[1])
+        if hi < lo:
+            lo, hi = hi, lo
+        if abs(float(delta[index])) < 1e-12:
+            if float(start[index]) < lo or float(start[index]) > hi:
+                return None
+            continue
+        enter = (lo - float(start[index])) / float(delta[index])
+        leave = (hi - float(start[index])) / float(delta[index])
+        t_lo = min(enter, leave)
+        t_hi = max(enter, leave)
+        t0 = max(t0, t_lo)
+        t1 = min(t1, t_hi)
+        if t0 > t1:
+            return None
+    return start + t0 * delta, start + t1 * delta
+
+
+def _bond_is_drawn(bond: dict[str, Any], atoms: list, style: dict[str, Any]) -> bool:
+    if bond.get("_render_visible") is False:
+        return False
+    if style.get("show_minor_only") and not bond.get("is_minor"):
+        return False
+    try:
+        if float(bond.get("_render_opacity_scale", 1.0)) <= 1.0e-12:
+            return False
+    except (TypeError, ValueError):
+        pass
+    for key in ("i", "j"):
+        try:
+            index = int(bond.get(key, -1))
+        except (TypeError, ValueError):
+            continue
+        if 0 <= index < len(atoms) and atoms[index].get("_render_visible") is False:
+            return False
+    return True
+
+
+def _drawn_bond_radius(style: dict[str, Any], bond: dict[str, Any]) -> float | None:
+    """Radius of the stroke that is actually painted, or None when no stick is."""
+
+    from ..render.representations import bond_stroke_for, normalize_representation
+
+    drawn = normalize_representation(style.get("style") or "ball_stick")
+    stroke = bond_stroke_for(drawn, drawn)
+    if stroke is None:
+        return None
+    try:
+        base = float(style.get("bond_radius") if style.get("bond_radius") is not None else 0.15)
+    except (TypeError, ValueError):
+        base = 0.15
+    if not np.isfinite(base) or base <= 0.0:
+        base = 0.15
+    try:
+        scale = float(bond.get("_render_radius_scale", 1.0) or 1.0)
+    except (TypeError, ValueError):
+        scale = 1.0
+    if not np.isfinite(scale) or scale < 0.0:
+        scale = 1.0
+    # Match the trace builders: mesh sticks use the bond radius, and the
+    # wireframe stroke is the thinner tube in traces_atoms.
+    if stroke in {"wireframe", "flat_illustration"}:
+        return max(0.015, 0.55 * base) * scale
+    return max(0.04, base) * scale
+
+
+def _append_visible_bonds(points, scene, style, camera, ranges, aspectratio, projection) -> None:
+    if _drawn_bond_radius(style, {}) is None:
+        return
+    atoms = list(scene.get("draw_atoms") or [])
+    for bond in scene.get("bonds") or []:
+        if not isinstance(bond, dict) or not _bond_is_drawn(bond, atoms, style):
+            continue
+        radius = _drawn_bond_radius(style, bond)
+        if radius is None:
+            continue
+        start = bond.get("start")
+        end = bond.get("end")
+        if start is None or end is None:
+            continue
+        try:
+            segment = _clip_segment_to_ranges(
+                np.asarray(start, dtype=float),
+                np.asarray(end, dtype=float),
+                ranges,
+            )
+        except (TypeError, ValueError):
+            continue
+        if segment is None:
+            continue
+        for endpoint in segment:
+            if endpoint.shape != (3,) or not np.all(np.isfinite(endpoint)):
+                continue
+            _append_sphere(points, endpoint, radius, camera, ranges, aspectratio, projection)
+
+
 def fit_target_points(
     scene: dict[str, Any],
     style: dict[str, Any],
@@ -186,7 +296,11 @@ def fit_target_points(
     aspectratio: dict[str, float] | None = None,
     projection: str | None = None,
 ) -> np.ndarray:
-    """Cell corners plus atom extents, or atom extents when the boundary is off."""
+    """Cell corners, atom extents, and the visible bond sticks.
+
+    Sphere-only drawings omit the sticks. A stick that leaves the axis
+    box is framed only up to the clip, which is where the mesh stops.
+    """
 
     from ..render.radius import atom_visual_radius
     from ..render.screen_projection import FIT_ATOM_EXTENT_A
@@ -258,6 +372,7 @@ def fit_target_points(
             if outside:
                 continue
         _append_sphere(points, center, radius, camera, ranges, aspectratio, mode)
+    _append_visible_bonds(points, scene, style, camera, ranges, aspectratio, mode)
     if not points:
         return np.empty((0, 3), dtype=float)
     return np.asarray(points, dtype=float)

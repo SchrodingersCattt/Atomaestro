@@ -105,8 +105,9 @@ must not change scene B, and a stale revision must not replace a newer one.
   can also put the previous, wider axis box back while leaving the ratio
   in place. The same repair writes the fitted ranges again. It also
   writes them when the layout spans already match but the gl clip box
-  is still the previous scale, so a bond past the data box is not
-  painted through the Fit margin. Fit and Reset
+  is still the previous scale. That afterplot writes the fitted ranges
+  through `glplot.setBounds` and redraws before the next paint sample,
+  so a bond past the data box is not painted through the Fit margin. Fit and Reset
   send the canvas width, height, and the height above the status bar and
   the Fit control. The framed camera is solved for that visible viewport.
 - `MatterVisSceneBox.adopt` relayouts a figure's camera, axis ranges,

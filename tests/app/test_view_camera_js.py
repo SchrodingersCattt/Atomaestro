@@ -1125,12 +1125,15 @@ const EventEmitter = require('node:events');
 const source = fs.readFileSync(process.argv[1], 'utf8');
 const ranges = {x: [-1.67, 23.93], y: [-0.66, 6.0], z: [-0.66, 6.0]};
 const gd = new EventEmitter();
+const redraws = [];
 function glplot() {
   return {
     aspect: {x: 1, y: 0.26, z: 0.26},
     bounds: [[-8, -4, -4], [40, 12, 12]],
     setAspectratio(aspect) { this.aspect = {x: Number(aspect.x), y: Number(aspect.y), z: Number(aspect.z)}; },
     getAspectratio() { return this.aspect; },
+    setBounds(index, edge) { this.bounds[0][index] = edge.min; this.bounds[1][index] = edge.max; },
+    redraw() { redraws.push(this.bounds[0].slice()); },
   };
 }
 Object.assign(gd, {
@@ -1170,14 +1173,11 @@ const sandbox = {
     relayout(graph, patch) {
       patches.push(patch);
       const scene = graph._fullLayout.scene;
-      ['x', 'y', 'z'].forEach((axis, index) => {
+      ['x', 'y', 'z'].forEach((axis) => {
         const pair = patch['scene.' + axis + 'axis.range'];
         if (!pair) return;
         scene[axis + 'axis'].range = [Number(pair[0]), Number(pair[1])];
         scene[axis + 'axis'].autorange = false;
-        const gl = scene._scene.glplot;
-        gl.bounds[0][index] = Number(pair[0]);
-        gl.bounds[1][index] = Number(pair[1]);
       });
       return Promise.resolve();
     },
@@ -1200,12 +1200,16 @@ const api = sandbox.window.MatterVisViewCamera;
   }), true);
   gd._fullLayout.scene._scene.glplot.bounds = [[-8, -4, -4], [40, 12, 12]];
   gd.emit('plotly_afterplot');
+  const bounds = gd._fullLayout.scene._scene.glplot.bounds;
+  assert.ok(Math.abs(bounds[0][0] - ranges.x[0]) < 1e-6);
+  assert.ok(Math.abs(bounds[1][0] - ranges.x[1]) < 1e-6);
+  assert.ok(Math.abs(bounds[0][2] - ranges.z[0]) < 1e-6);
+  assert.equal(redraws.length, 1);
   await Promise.resolve();
   await Promise.resolve();
   const rangePatch = patches.find((patch) => patch['scene.xaxis.range']);
   assert.ok(rangePatch, 'a wider clip box scheduled a range relayout');
   assert.deepEqual(rangePatch['scene.xaxis.range'], ranges.x);
-  const bounds = gd._fullLayout.scene._scene.glplot.bounds;
   assert.ok(Math.abs(bounds[1][0] - ranges.x[1]) < 1e-6);
   assert.equal(status.textContent, '');
 })().catch((error) => { console.error(error); process.exitCode = 1; });

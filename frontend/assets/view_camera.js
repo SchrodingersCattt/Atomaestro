@@ -434,9 +434,10 @@
       }
     }
     /* Layout ranges can already name the fit while glplot.bounds still
-     * clips with the previous dataScale. A ranges relayout with the
-     * projection left alone rebuilds that clip box. */
+     * clips with the previous dataScale. Write that clip now. A later
+     * ranges relayout keeps the next scene plot on the same box. */
     if (!mismatch && clipBoxDrift(scene, fitted.ranges)) mismatch = true;
+    if (mismatch) tightenClipBox(scene, fitted.ranges);
     if (!mismatch && !aspectMismatch) return Promise.resolve();
     var patch = {};
     if (mismatch) {
@@ -492,6 +493,36 @@
       if (!Number.isFinite(haveMin) || !Number.isFinite(haveMax)) return false;
       return Math.abs(haveMin - wantMin) / span > 0.02 || Math.abs(haveMax - wantMax) / span > 0.02;
     });
+  }
+  function tightenClipBox(scene, ranges) {
+    /* scene.plot copies each axis range times dataScale into glplot.bounds
+     * through setBounds, and the draw assigns that array as every object's
+     * clip. A plot that ran while the ranges were still the previous scale
+     * leaves the wider array in place after the layout spans have been put
+     * back. setBounds updates the array the objects already share, and
+     * redraw paints the fitted clip before the next read. */
+    if (!ranges || !scene || !plotlyPrivateStateAllowed()) return;
+    var holder = scene._scene;
+    var plot = holder && holder.glplot;
+    var scale = holder && holder.dataScale;
+    var bounds = plot && plot.bounds;
+    if (!bounds || !bounds[0] || !bounds[1] || !scale) return;
+    ["x", "y", "z"].forEach(function (axis, index) {
+      var pair = ranges[axis];
+      var factor = Number(scale[index]);
+      if (!pair || !Number.isFinite(factor)) return;
+      var min = Number(pair[0]) * factor;
+      var max = Number(pair[1]) * factor;
+      if (!Number.isFinite(min) || !Number.isFinite(max)) return;
+      if (typeof plot.setBounds === "function") {
+        try { plot.setBounds(index, {min: min, max: max}); } catch (_) {}
+      }
+      bounds[0][index] = min;
+      bounds[1][index] = max;
+    });
+    if (typeof plot.redraw === "function") {
+      try { plot.redraw(); } catch (_) {}
+    }
   }
   function installFittedRangeGuard() {
     /* Fitted ranges are restored inside the frame task. Wrapping
@@ -870,8 +901,12 @@
       }
       /* The same late plot can leave the gl clip on the previous, wider
        * scale after the layout spans already name the fit. Bonds past
-       * the data box stay painted until that clip is rebuilt. */
+       * the data box stay painted until that clip is rebuilt. The write
+       * is synchronous: the plot that emitted this afterplot has already
+       * drawn the wide clip, and the paint sample does not wait for
+       * another relayout. */
       if (!rangeDrift && clipBoxDrift(scene, frame.ranges)) rangeDrift = true;
+      if (rangeDrift) tightenClipBox(scene, frame.ranges);
       if (!drifted && !rangeDrift) return;
       /* The fit relayout is still inside this plot. A nested relayout is
        * rejected and the rejection used to restore the camera and toast.

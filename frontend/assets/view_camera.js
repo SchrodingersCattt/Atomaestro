@@ -434,10 +434,11 @@
       }
     }
     /* Layout ranges can already name the fit while glplot.bounds still
-     * clips with the previous dataScale. Write that clip now. A later
-     * ranges relayout keeps the next scene plot on the same box. */
-    if (!mismatch && clipBoxDrift(scene, fitted.ranges)) mismatch = true;
-    if (mismatch) tightenClipBox(scene, fitted.ranges);
+     * clips with the previous dataScale. Write that clip here. A ranges
+     * relayout would run Scene.plot, and setViewport would put the
+     * layout camera back, including a projection the follow-up just
+     * changed and an orbit that has not been stored yet. */
+    if (clipBoxDrift(scene, fitted.ranges)) tightenClipBox(scene, fitted.ranges);
     if (!mismatch && !aspectMismatch) return Promise.resolve();
     var patch = {};
     if (mismatch) {
@@ -900,14 +901,18 @@
         });
       }
       /* The same late plot can leave the gl clip on the previous, wider
-       * scale after the layout spans already name the fit. Bonds past
-       * the data box stay painted until that clip is rebuilt. The write
-       * is synchronous: the plot that emitted this afterplot has already
-       * drawn the wide clip, and the paint sample does not wait for
-       * another relayout. */
-      if (!rangeDrift && clipBoxDrift(scene, frame.ranges)) rangeDrift = true;
-      if (rangeDrift) tightenClipBox(scene, frame.ranges);
+       * scale after the layout spans already name the fit. Write the
+       * clip and redraw. Do not relayout those ranges: Scene.plot's
+       * setViewport would restore the layout camera and undo an orbit
+       * or a projection follow-up that has not been stored yet. */
+      if (!rangeDrift && clipBoxDrift(scene, frame.ranges)) tightenClipBox(scene, frame.ranges);
       if (!drifted && !rangeDrift) return;
+      /* This afterplot is still inside the frame's react. A nested
+       * relayout is rejected, and that rejection restores the camera. */
+      if (gd.__mvInsideFrameReact) return;
+      /* Pointer is down. The layout camera is still the pose from
+       * before this drag, so a scene relayout would cancel the orbit. */
+      if (!root.__mvGestureEndedAt && root.__mvGestureSceneId && root.__mvGestureKind === "pointer") return;
       /* The fit relayout is still inside this plot. A nested relayout is
        * rejected and the rejection used to restore the camera and toast.
        * Retry after that command releases the graph. */

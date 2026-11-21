@@ -1199,6 +1199,7 @@ const api = sandbox.window.MatterVisViewCamera;
     aspectratio: {x: 1, y: 0.26, z: 0.26}, ranges,
   }), true);
   gd._fullLayout.scene._scene.glplot.bounds = [[-8, -4, -4], [40, 12, 12]];
+  patches.length = 0;
   gd.emit('plotly_afterplot');
   const bounds = gd._fullLayout.scene._scene.glplot.bounds;
   assert.ok(Math.abs(bounds[0][0] - ranges.x[0]) < 1e-6);
@@ -1207,10 +1208,7 @@ const api = sandbox.window.MatterVisViewCamera;
   assert.equal(redraws.length, 1);
   await Promise.resolve();
   await Promise.resolve();
-  const rangePatch = patches.find((patch) => patch['scene.xaxis.range']);
-  assert.ok(rangePatch, 'a wider clip box scheduled a range relayout');
-  assert.deepEqual(rangePatch['scene.xaxis.range'], ranges.x);
-  assert.ok(Math.abs(bounds[1][0] - ranges.x[1]) < 1e-6);
+  assert.equal(patches.some((patch) => patch['scene.xaxis.range']), false);
   assert.equal(status.textContent, '');
 })().catch((error) => { console.error(error); process.exitCode = 1; });
 """

@@ -71,10 +71,31 @@
     enqueue(gd, function () {
       if (!current()) return gd;
       if (postcondition(gd, latest.snapshot)) return gd;
-      return Promise.resolve(root.Plotly.relayout(gd, clone(latest.patch)));
+      return Promise.resolve(relayoutAsQueueOwner(gd, clone(latest.patch)));
     }, {isCurrent: current, group: "camera"}).then(finish, finish).catch(function () {
       if (current()) reportStatus("error", "The camera update could not be restored.");
     });
+  }
+  function relayoutAsQueueOwner(gd, patch) {
+    var state = gd && gd.__mvRenderQueueState;
+    var previous = state && state.reentrantToken;
+    var token = {};
+    if (state && state.running) state.reentrantToken = token;
+    var pending;
+    try {
+      pending = root.Plotly.relayout(gd, patch);
+    } catch (err) {
+      if (state && state.reentrantToken === token) state.reentrantToken = previous;
+      throw err;
+    }
+    function finish() {
+      if (state && state.reentrantToken === token) state.reentrantToken = previous;
+    }
+    if (pending && typeof pending.then === "function") {
+      return pending.then(function (value) { finish(); return value; }, function (err) { finish(); throw err; });
+    }
+    finish();
+    return pending;
   }
   function enqueue(gd, task, options) {
     options = options || {};
@@ -155,7 +176,7 @@
     if (!gd) return null;
     var full = gd._fullLayout || {};
     var scene = full.scene || {};
-    var internal = scene._scene;
+    var internal = plotlyPrivateStateAllowed() ? scene._scene : null;
     if (internal && typeof internal.getCamera === "function") {
       try {
         var camera = internal.getCamera();
@@ -180,18 +201,54 @@
     if (!value) return false;
     var view = typeof ArrayBuffer !== "undefined" && ArrayBuffer.isView && ArrayBuffer.isView(value);
     if (Array.isArray(value) || view) return value.length > 0;
-    /* Plotly columns arrive as {dtype, bdata}. The object itself has no
-     * length, so an array check drops coordinates that are on the trace. */
     return typeof value.bdata === "string" && value.bdata.length > 0 && !!value.dtype;
   }
-  function visibleGeometry(gd) {
+  function geometryTraceKind(trace) {
+    if (!trace || trace.visible === false || trace.visible === "legendonly") return "";
+    var type = String(trace.type || "").toLowerCase();
+    if (type === "mesh3d" || type === "scatter3d" || type === "cone" || type === "streamtube" || type === "surface" || type === "volume" || type === "isosurface") return type;
+    return "";
+  }
+  function traceHasGeometry(trace) {
+    var type = geometryTraceKind(trace);
+    if (!type) return false;
+    if (type === "mesh3d") return hasCoordinateValues(trace.x) && hasCoordinateValues(trace.i);
+    return hasCoordinateValues(trace.x) || hasCoordinateValues(trace.y) || hasCoordinateValues(trace.z);
+  }
+  function dataHasVisibleGeometry(gd) {
     var data = gd && Array.isArray(gd.data) ? gd.data : [];
-    return data.some(function (trace) {
-      if (!trace || trace.visible === false || trace.visible === "legendonly") return false;
-      var type = String(trace.type || "").toLowerCase();
-      if (type === "mesh3d") return hasCoordinateValues(trace.x) && hasCoordinateValues(trace.i);
-      return hasCoordinateValues(trace.x) || hasCoordinateValues(trace.y) || hasCoordinateValues(trace.z);
+    return data.some(traceHasGeometry);
+  }
+  /* Geometry is missing when the frame claims 3D traces and none of them
+   * have coordinates. One empty companion, a hidden trace, a non-3D trace,
+   * or a layout image does not erase a trace that does have coordinates. */
+  function missingClaimedGeometry(gd) {
+    var data = gd && Array.isArray(gd.data) ? gd.data : [];
+    var claimed = false;
+    var found = false;
+    data.forEach(function (trace) {
+      if (!geometryTraceKind(trace)) return;
+      claimed = true;
+      if (traceHasGeometry(trace)) found = true;
     });
+    return claimed && !found;
+  }
+  /* A wiped gl3d scene keeps the input traces and loses scene.traces plus
+   * glplot.objects. Hosts that never expose those fields stay on the data
+   * check so a camera-only test double does not look blank. */
+  function liveRendererEmpty(gd) {
+    if (!plotlyPrivateStateAllowed()) return false;
+    var scene = gd && gd._fullLayout && gd._fullLayout.scene && gd._fullLayout.scene._scene;
+    var plot = scene && scene.glplot;
+    if (!plot || !scene.traces || typeof scene.traces !== "object" || Array.isArray(scene.traces) || !Array.isArray(plot.objects)) return false;
+    var gl = plot.canvas && plot.canvas.__mvGL;
+    if (plot.contextLost) return true;
+    if (gl && typeof gl.isContextLost === "function" && gl.isContextLost()) return true;
+    return Object.keys(scene.traces).length === 0 || plot.objects.length === 0;
+  }
+  function visibleGeometry(gd) {
+    if (!dataHasVisibleGeometry(gd)) return false;
+    return !liveRendererEmpty(gd);
   }
   function internalProjection(gd) {
     var scene = gd && gd._fullLayout && gd._fullLayout.scene && gd._fullLayout.scene._scene;
@@ -218,9 +275,11 @@
     return Math.hypot(x, y, z);
   }
   function liveEye(gd) {
-    var scene = gd && gd._fullLayout && gd._fullLayout.scene && gd._fullLayout.scene._scene;
-    var controller = scene && (scene.camera || (scene.glplot && scene.glplot.camera));
-    if (controller && controller.eye) return controller.eye;
+    if (plotlyPrivateStateAllowed()) {
+      var scene = gd && gd._fullLayout && gd._fullLayout.scene && gd._fullLayout.scene._scene;
+      var controller = scene && (scene.camera || (scene.glplot && scene.glplot.camera));
+      if (controller && controller.eye) return controller.eye;
+    }
     var camera = actualCamera(gd);
     return camera && camera.eye;
   }
@@ -363,7 +422,7 @@
     }
     /* _fullLayout can already show the fitted ratio while glplot still
      * draws the previous one. That is the ratio a scene plot writes back. */
-    if (!aspectMismatch && fitted.aspectratio) {
+    if (!aspectMismatch && fitted.aspectratio && plotlyPrivateStateAllowed()) {
       var plot = scene._scene && scene._scene.glplot;
       var painted = plot && typeof plot.getAspectratio === "function" ? plot.getAspectratio() : null;
       if (painted) {
@@ -374,6 +433,12 @@
         });
       }
     }
+    /* Layout ranges can already name the fit while glplot.bounds still
+     * clips with the previous dataScale. Write that clip here. A ranges
+     * relayout would run Scene.plot, and setViewport would put the
+     * layout camera back, including a projection the follow-up just
+     * changed and an orbit that has not been stored yet. */
+    if (clipBoxDrift(scene, fitted.ranges)) tightenClipBox(scene, fitted.ranges);
     if (!mismatch && !aspectMismatch) return Promise.resolve();
     var patch = {};
     if (mismatch) {
@@ -407,10 +472,145 @@
       return Promise.reject(err);
     });
   }
+  function clipBoxDrift(scene, ranges) {
+    /* glplot.bounds is the clip. A box wider than the fitted ranges
+     * keeps drawing the part of a bond that sits past the data box,
+     * and that ink falls outside the Fit margin. Spans can already
+     * match while this clip is still the previous scale. */
+    if (!ranges || !scene || !plotlyPrivateStateAllowed()) return false;
+    var plot = scene._scene && scene._scene.glplot;
+    var scale = scene._scene && scene._scene.dataScale;
+    var bounds = plot && plot.bounds;
+    if (!bounds || !bounds[0] || !bounds[1] || !scale) return false;
+    return ["x", "y", "z"].some(function (axis, index) {
+      var pair = ranges[axis];
+      var factor = Number(scale[index]);
+      if (!pair || !Number.isFinite(factor) || factor === 0) return false;
+      var wantMin = Number(pair[0]) * factor;
+      var wantMax = Number(pair[1]) * factor;
+      var span = Math.max(Math.abs(wantMax - wantMin), 1e-6);
+      var haveMin = Number(bounds[0][index]);
+      var haveMax = Number(bounds[1][index]);
+      if (!Number.isFinite(haveMin) || !Number.isFinite(haveMax)) return false;
+      return Math.abs(haveMin - wantMin) / span > 0.02 || Math.abs(haveMax - wantMax) / span > 0.02;
+    });
+  }
+  function tightenClipBox(scene, ranges) {
+    /* scene.plot copies each axis range times dataScale into glplot.bounds
+     * through setBounds, and the draw assigns that array as every object's
+     * clip. A plot that ran while the ranges were still the previous scale
+     * leaves the wider array in place after the layout spans have been put
+     * back. setBounds updates the array the objects already share, and
+     * redraw paints the fitted clip before the next read. */
+    if (!ranges || !scene || !plotlyPrivateStateAllowed()) return;
+    var holder = scene._scene;
+    var plot = holder && holder.glplot;
+    var scale = holder && holder.dataScale;
+    var bounds = plot && plot.bounds;
+    if (!bounds || !bounds[0] || !bounds[1] || !scale) return;
+    ["x", "y", "z"].forEach(function (axis, index) {
+      var pair = ranges[axis];
+      var factor = Number(scale[index]);
+      if (!pair || !Number.isFinite(factor)) return;
+      var min = Number(pair[0]) * factor;
+      var max = Number(pair[1]) * factor;
+      if (!Number.isFinite(min) || !Number.isFinite(max)) return;
+      if (typeof plot.setBounds === "function") {
+        try { plot.setBounds(index, {min: min, max: max}); } catch (_) {}
+      }
+      bounds[0][index] = min;
+      bounds[1][index] = max;
+    });
+    if (typeof plot.redraw === "function") {
+      try { plot.redraw(); } catch (_) {}
+    }
+  }
   function installFittedRangeGuard() {
     /* Fitted ranges are restored inside the frame task. Wrapping
      * Plotly.react here would relayout again after that task moved on. */
     root.__mvFittedRangeGuard = true;
+  }
+  function eyeVector(value) {
+    if (!value) return null;
+    var x = Number(value.x !== undefined && value.x !== null ? value.x : value[0]);
+    var y = Number(value.y !== undefined && value.y !== null ? value.y : value[1]);
+    var z = Number(value.z !== undefined && value.z !== null ? value.z : value[2]);
+    return [x, y, z].every(Number.isFinite) ? [x, y, z] : null;
+  }
+  function eyeMatches(left, right) {
+    var a = eyeVector(left);
+    var b = eyeVector(right);
+    if (!a || !b) return false;
+    return Math.abs(a[0] - b[0]) <= 1e-3 && Math.abs(a[1] - b[1]) <= 1e-3 && Math.abs(a[2] - b[2]) <= 1e-3;
+  }
+  function commitControllerPose(controller, camera) {
+    /* Plotly's orbit camera stores distance as a log radius and
+     * rebuilds .eye only when the view matrix is recalculated.
+     * lookAt recalculates the previous pose first. A second key at
+     * the same timestamp is invisible when the sampler keeps the
+     * earlier one, and the render tick samples one delay behind
+     * lastT. Stamp the pose at lastT and one millisecond later, then
+     * recalculate that later sample so .eye is this distance. */
+    if (!controller || typeof controller.lookAt !== "function" || !camera) return;
+    var eye = eyeVector(camera.eye);
+    var center = eyeVector(camera.center);
+    var up = eyeVector(camera.up);
+    if (!eye || !center || !up) return;
+    var view = controller.view;
+    var when = 0;
+    if (view && typeof view.lastT === "function") {
+      when = Number(view.lastT());
+      if (!Number.isFinite(when)) when = 0;
+    }
+    var posed = false;
+    if (view && typeof view.lookAt === "function") {
+      try {
+        view.lookAt(when, eye, center, up);
+        view.lookAt(when + 1, eye, center, up);
+        posed = true;
+      } catch (_) {}
+    }
+    if (!posed) {
+      try { controller.lookAt(eye, center, up); }
+      catch (_) { return; }
+    }
+    if (view && typeof view.recalcMatrix === "function") {
+      try { view.recalcMatrix(when + 1); }
+      catch (_) {
+        try { view.recalcMatrix(when); } catch (_) {}
+      }
+    }
+    if (!eyeMatches(controller.eye, eye) && view && typeof view.recalcMatrix === "function") {
+      try { view.recalcMatrix(when); } catch (_) {}
+    }
+  }
+  function noteUnadoptedWheel(graph, pose) {
+    /* The camera book can still hold the previous distance when this
+     * relayout is acknowledged. A same-scene apply would then paint that
+     * stale eye over the zoom. Record the pose, and the book, before the
+     * relayout returns. */
+    var meta = graph && graph.layout && graph.layout.meta && graph.layout.meta.mattervis_render;
+    var sceneId = meta && meta.scene_id ? String(meta.scene_id) : "";
+    var revision = meta && meta.camera_revision !== undefined && meta.camera_revision !== null
+      ? Number(meta.camera_revision) : null;
+    root.__mvUnadoptedWheel = {
+      sceneId: sceneId,
+      camera: pose,
+      camera_revision: Number.isFinite(revision) ? revision : null,
+    };
+    if (!sceneId) return;
+    var book = root.__mvServerCameraByScene || (root.__mvServerCameraByScene = {});
+    var previous = book[sceneId] || {};
+    book[sceneId] = {
+      camera: pose,
+      camera_revision: Number.isFinite(revision) ? revision : previous.camera_revision,
+      scene_generation: previous.scene_generation !== undefined && previous.scene_generation !== null
+        ? previous.scene_generation
+        : (meta ? meta.scene_generation : null),
+      server_started_at: previous.server_started_at !== undefined && previous.server_started_at !== null
+        ? previous.server_started_at
+        : (meta ? meta.server_started_at : null),
+    };
   }
   function installWheelZoom(gd) {
     /* Plotly's orthographic wheel handler multiplies the scene aspect
@@ -464,12 +664,25 @@
         var named = projectionType(actualCamera(graph));
         if (named) projection = named;
       }
+      var zoomPose = {
+        eye: {x: next[0], y: next[1], z: next[2]},
+        center: {x: axisComponent(center, 0, "x"), y: axisComponent(center, 1, "y"), z: axisComponent(center, 2, "z")},
+        up: {x: axisComponent(up, 0, "x"), y: axisComponent(up, 1, "y"), z: axisComponent(up, 2, "z")},
+      };
+      noteUnadoptedWheel(graph, zoomPose);
       Promise.resolve(root.Plotly.relayout(graph, {
-        "scene.camera.eye": {x: next[0], y: next[1], z: next[2]},
-        "scene.camera.center": {x: axisComponent(center, 0, "x"), y: axisComponent(center, 1, "y"), z: axisComponent(center, 2, "z")},
-        "scene.camera.up": {x: axisComponent(up, 0, "x"), y: axisComponent(up, 1, "y"), z: axisComponent(up, 2, "z")},
+        "scene.camera.eye": zoomPose.eye,
+        "scene.camera.center": zoomPose.center,
+        "scene.camera.up": zoomPose.up,
         "scene.camera.projection.type": projection,
-      })).catch(function () {});
+      })).then(function () {
+        /* Relayout can replace the controller. Commit the one that is
+         * mounted now. The book already holds this pose, so a stale
+         * apply that finishes later must not put the previous eye back. */
+        var sceneNow = graph._fullLayout && graph._fullLayout.scene && graph._fullLayout.scene._scene;
+        var current = sceneNow && (sceneNow.camera || (sceneNow.glplot && sceneNow.glplot.camera));
+        commitControllerPose(current || controller, zoomPose);
+      }, function () {});
     }, {capture: true, passive: false});
   }
   var resizeTimer = null;
@@ -530,6 +743,11 @@
      * on the graph div so a replacement receives a fresh handler.  The old
      * handler remains harmless: it checks __mvContextRetired/detached and
      * compares its canvas with the currently live Plotly canvas below. */
+    if (gd.__mvContextLossCanvas && gd.__mvContextLossCanvas !== canvas) {
+      var ring = root.__mvRendererDiag || (root.__mvRendererDiag = []);
+      ring.push({at: Date.now(), kind: "canvas-replaced"});
+      if (ring.length > 20) ring.splice(0, ring.length - 20);
+    }
     if (gd.__mvContextLossCanvas === canvas) return;
     canvas.addEventListener("webglcontextlost", function (event) {
       if (event && event.preventDefault) event.preventDefault();
@@ -682,7 +900,19 @@
           return Math.abs(liveSpan - wantSpan) > 1e-3 * Math.max(wantSpan, 1);
         });
       }
+      /* The same late plot can leave the gl clip on the previous, wider
+       * scale after the layout spans already name the fit. Write the
+       * clip and redraw. Do not relayout those ranges: Scene.plot's
+       * setViewport would restore the layout camera and undo an orbit
+       * or a projection follow-up that has not been stored yet. */
+      if (!rangeDrift && clipBoxDrift(scene, frame.ranges)) tightenClipBox(scene, frame.ranges);
       if (!drifted && !rangeDrift) return;
+      /* This afterplot is still inside the frame's react. A nested
+       * relayout is rejected, and that rejection restores the camera. */
+      if (gd.__mvInsideFrameReact) return;
+      /* Pointer is down. The layout camera is still the pose from
+       * before this drag, so a scene relayout would cancel the orbit. */
+      if (!root.__mvGestureEndedAt && root.__mvGestureSceneId && root.__mvGestureKind === "pointer") return;
       /* The fit relayout is still inside this plot. A nested relayout is
        * rejected and the rejection used to restore the camera and toast.
        * Retry after that command releases the graph. */
@@ -774,9 +1004,11 @@
       var got = projectionType(actualCamera(gd));
       if (got && got !== expected) return "projection";
     }
-    /* Coordinates have to be on a trace. A layout image is not geometry,
-     * and its source is not checked against the current scene. */
-    if (gd && Array.isArray(gd.data) && gd.data.length && !visibleGeometry(gd)) return "geometry";
+    /* Coordinates have to be on a trace that claims to draw them. A layout
+     * image is not geometry. Hidden traces are not a missing model. A wiped
+     * gl scene with coordinates still present is not drawable. */
+    if (missingClaimedGeometry(gd)) return "geometry";
+    if (dataHasVisibleGeometry(gd) && liveRendererEmpty(gd)) return "geometry";
     if (options && options.requireEye) {
       var expectedDistance = vectorLength(camera && camera.eye);
       var gotDistance = vectorLength(liveEye(gd));
@@ -1175,7 +1407,7 @@
        * command must not expire Reset before it starts, and a timeout from a
        * command that a newer revision already replaced must not reset the new
        * queue. */
-      var attempt = withTimeout(Promise.resolve(root.Plotly.relayout(gd, clone(patch))), timeoutMs(), function () {
+      var attempt = withTimeout(Promise.resolve(relayoutAsQueueOwner(gd, clone(patch))), timeoutMs(), function () {
         if (gd.__mvRenderQueueState === queueToken) resetQueue(gd, "camera relayout timeout");
       });
       return attempt.then(function () {
@@ -1183,11 +1415,12 @@
           gd.layout.meta.mattervis_render.camera_revision = requestedRevision;
         }
         commitFittedAspect(gd, options.aspectratio);
+        installContextLoss(gd);
         /* A drag relayout can resolve after Reset already replaced the queue.
          * Re-apply the newest command so the late Plotly write cannot stick. */
         if (Number.isFinite(requestedRevision) && Number(gd.__mvCameraRevision) !== requestedRevision) {
           var latest = gd.__mvLatestCamera;
-          var restore = latest && latest.patch ? Promise.resolve(root.Plotly.relayout(gd, clone(latest.patch))) : Promise.resolve();
+          var restore = latest && latest.patch ? Promise.resolve(relayoutAsQueueOwner(gd, clone(latest.patch))) : Promise.resolve();
           return restore.then(function () { diag("staleDrops"); throw new Error("stale camera command"); });
         }
       });
@@ -1252,6 +1485,7 @@
       commitFittedAspect(gd);
       return restoreFittedRanges(gd);
     },
+    commitControllerPose: commitControllerPose,
     fittedIdentityMatches: fittedIdentityMatches,
     noteFigureFrame: noteFigureFrame,
   };

@@ -477,6 +477,98 @@ assert.ok(dist > 0.5, 'max zoom still uses the old 0.35 eye floor inside the cub
     assert result.returncode == 0, result.stderr
 
 
+def test_wheel_zoom_adopts_radius_and_remembers_an_unadopted_pose():
+    """A same-timestamp radius key must not leave the controller at the previous distance."""
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is needed to execute the frontend regression")
+    source = Path(__file__).resolve().parents[2] / "frontend" / "assets" / "view_camera.js"
+    program = r"""
+const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+function laggingController(initial) {
+  let eye = initial.slice();
+  let last = 10;
+  const keys = [{t: 10, eye: initial.slice(), first: true}];
+  const view = {
+    lastT() { return last; },
+    lookAt(t, next) {
+      if (t < last) return;
+      last = t;
+      keys.push({t, eye: next.slice(), first: false});
+    },
+    recalcMatrix(t) {
+      // Duplicate timestamps keep the earlier key. A later timestamp does not.
+      let best = -Infinity;
+      let chosen = keys[0];
+      for (const key of keys) {
+        if (key.t <= t && key.t > best) { best = key.t; chosen = key; }
+      }
+      eye = chosen.eye.slice();
+    },
+  };
+  return {
+    view,
+    center: [0, 0, 0],
+    up: [0, 0, 1],
+    _ortho: false,
+    lookAt(next) { view.lookAt(view.lastT(), next); },
+    get eye() { return eye; },
+  };
+}
+const listeners = [];
+const canvas = {};
+const initial = [1.2, 0.4, 0.3];
+const mounted = laggingController(initial);
+const gd = {
+  isConnected: true,
+  layout: {meta: {mattervis_render: {scene_id: 'ionic'}}},
+  _fullLayout: {
+    scene: {
+      aspectratio: {x: 1, y: 1, z: 1},
+      _scene: {glplot: {canvas}, camera: mounted},
+    },
+  },
+};
+const sandbox = {
+  Promise, Object, Array, JSON, Number, String, Date, Math, setTimeout, clearTimeout,
+  window: {Plotly: {relayout: () => {
+    gd._fullLayout.scene._scene.camera = laggingController(initial);
+    return Promise.resolve();
+  }}},
+  document: {addEventListener: (type, fn) => listeners.push({type, fn})},
+};
+vm.createContext(sandbox);
+vm.runInContext(source, sandbox);
+const commit = sandbox.window.MatterVisViewCamera.commitControllerPose;
+const direct = laggingController(initial);
+commit(direct, {eye: {x: 0.6, y: 0.2, z: 0.15}, center: {x: 0, y: 0, z: 0}, up: {x: 0, y: 0, z: 1}});
+assert.ok(Math.abs(direct.eye[0] - 0.6) < 1e-6, 'same-timestamp lookAt left the previous radius');
+sandbox.window.MatterVisViewCamera.installWheelZoom(gd);
+const wheel = listeners.find(item => item.type === 'wheel').fn;
+wheel({
+  target: canvas,
+  deltaY: -240,
+  deltaX: 0,
+  preventDefault() {},
+  stopImmediatePropagation() {},
+});
+(async () => {
+  await Promise.resolve();
+  const camera = gd._fullLayout.scene._scene.camera;
+  const factor = Math.exp(-240 / 900);
+  assert.ok(Math.abs(camera.eye[0] - initial[0] * factor) < 1e-6, 'wheel left the replaced controller at the old eye');
+  const pending = sandbox.window.__mvUnadoptedWheel;
+  assert.equal(pending && pending.sceneId, 'ionic');
+  assert.ok(Math.abs(pending.camera.eye.x - initial[0] * factor) < 1e-6);
+  const book = sandbox.window.__mvServerCameraByScene.ionic;
+  assert.ok(Math.abs(book.camera.eye.x - initial[0] * factor) < 1e-6, 'wheel left the book at the previous eye');
+})().catch(error => { console.error(error); process.exitCode = 1; });
+"""
+    result = subprocess.run([node, "-e", program, str(source)], capture_output=True, text=True, timeout=15, check=False)
+    assert result.returncode == 0, result.stderr
+
+
 def test_orthographic_postcondition_waits_for_a_late_gl_flip():
     node = shutil.which("node")
     if node is None:
@@ -647,6 +739,12 @@ const stale = graph(
 );
 assert.equal(api.visibleGeometry(stale), false);
 assert.equal(api.postcondition(stale, ortho, {command:'projection'}), false, 'a stale layout image masked missing coordinates');
+const companion = graph([
+  {type:'scatter3d', x:[0, 1], y:[0, 1], z:[0, 1]},
+  {type:'mesh3d', x:[], y:[], z:[], i:[], j:[], k:[]},
+]);
+assert.equal(api.visibleGeometry(companion), true);
+assert.equal(api.postcondition(companion, ortho, {command:'projection'}), true, 'an empty companion trace hid a trace that has coordinates');
 const hiddenImage = graph([{type:'scatter3d', x:[], y:[], z:[]}], [{source:'data:image/png;base64,STALE', visible:false}]);
 assert.equal(api.postcondition(hiddenImage, ortho, {command:'projection'}), false);
 """
@@ -1009,6 +1107,109 @@ function flushLastWriter() {
   gd._fullLayout.scene._scene.glplot = untouched;
   untouched.setAspectratio({x: 0.5, y: 0.25, z: 0.25});
   assert.equal(untouched.getAspectratio().x, 0.5);
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+"""
+    result = subprocess.run([node, "-e", program, str(source)], capture_output=True, text=True, timeout=15, check=False)
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_late_plot_rebuilds_a_clip_box_that_is_wider_than_the_fit():
+    """Spans can already match while glplot.bounds still clips the previous scale."""
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is needed to execute the frontend regression")
+    source = Path(__file__).resolve().parents[2] / "frontend" / "assets" / "view_camera.js"
+    program = r"""
+const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
+const EventEmitter = require('node:events');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const ranges = {x: [-1.67, 23.93], y: [-0.66, 6.0], z: [-0.66, 6.0]};
+const gd = new EventEmitter();
+const redraws = [];
+function glplot() {
+  return {
+    aspect: {x: 1, y: 0.26, z: 0.26},
+    bounds: [[-8, -4, -4], [40, 12, 12]],
+    setAspectratio(aspect) { this.aspect = {x: Number(aspect.x), y: Number(aspect.y), z: Number(aspect.z)}; },
+    getAspectratio() { return this.aspect; },
+    setBounds(index, edge) { this.bounds[0][index] = edge.min; this.bounds[1][index] = edge.max; },
+    redraw() { redraws.push(this.bounds[0].slice()); },
+  };
+}
+Object.assign(gd, {
+  layout: {
+    scene: {
+      aspectmode: 'manual',
+      aspectratio: {x: 1, y: 0.26, z: 0.26},
+      camera: {projection: {type: 'perspective'}},
+      xaxis: {range: ranges.x.slice()},
+      yaxis: {range: ranges.y.slice()},
+      zaxis: {range: ranges.z.slice()},
+    },
+    meta: {mattervis_render: {scene_id: 'cell', scene_generation: 1, camera_revision: 0}},
+  },
+  data: [{type: 'scatter3d', x: [0], y: [0], z: [0]}],
+  _fullLayout: {scene: {
+    aspectmode: 'manual',
+    aspectratio: {x: 1, y: 0.26, z: 0.26},
+    xaxis: {range: ranges.x.slice(), autorange: false},
+    yaxis: {range: ranges.y.slice(), autorange: false},
+    zaxis: {range: ranges.z.slice(), autorange: false},
+    _scene: {dataScale: [1, 1, 1]},
+  }},
+});
+gd._fullLayout.scene._scene.glplot = glplot();
+gd._fullLayout.scene._scene.getCamera = () => ({
+  eye: {x: 0.67, y: 0.56, z: 0.47},
+  center: {x: 0.1, y: 0, z: -0.1},
+  up: {x: 0, y: 0, z: 1},
+  projection: {type: 'perspective'},
+});
+const patches = [];
+const status = {hidden: true, textContent: '', setAttribute() {}};
+const sandbox = {
+  Promise, Object, Array, JSON, Number, String, Date, Math, setTimeout, clearTimeout,
+  window: {Plotly: {
+    relayout(graph, patch) {
+      patches.push(patch);
+      const scene = graph._fullLayout.scene;
+      ['x', 'y', 'z'].forEach((axis) => {
+        const pair = patch['scene.' + axis + 'axis.range'];
+        if (!pair) return;
+        scene[axis + 'axis'].range = [Number(pair[0]), Number(pair[1])];
+        scene[axis + 'axis'].autorange = false;
+      });
+      return Promise.resolve();
+    },
+    react() { return Promise.resolve(); },
+  }},
+  document: {getElementById: (id) => id === 'mv-render-status' ? status : (id === 'crystal-graph' ? {querySelector: () => gd} : null)},
+};
+vm.createContext(sandbox);
+vm.runInContext(source, sandbox);
+const api = sandbox.window.MatterVisViewCamera;
+(async () => {
+  assert.equal(await api.applyAsync({
+    eye: {x: 0.67, y: 0.56, z: 0.47},
+    center: {x: 0.1, y: 0, z: -0.1},
+    up: {x: 0, y: 0, z: 1},
+    projection: {type: 'perspective'},
+  }, {
+    scene_id: 'cell', scene_generation: 1, camera_version: 1, command: 'fit',
+    aspectratio: {x: 1, y: 0.26, z: 0.26}, ranges,
+  }), true);
+  gd._fullLayout.scene._scene.glplot.bounds = [[-8, -4, -4], [40, 12, 12]];
+  patches.length = 0;
+  gd.emit('plotly_afterplot');
+  const bounds = gd._fullLayout.scene._scene.glplot.bounds;
+  assert.ok(Math.abs(bounds[0][0] - ranges.x[0]) < 1e-6);
+  assert.ok(Math.abs(bounds[1][0] - ranges.x[1]) < 1e-6);
+  assert.ok(Math.abs(bounds[0][2] - ranges.z[0]) < 1e-6);
+  assert.equal(redraws.length, 1);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(patches.some((patch) => patch['scene.xaxis.range']), false);
+  assert.equal(status.textContent, '');
 })().catch((error) => { console.error(error); process.exitCode = 1; });
 """
     result = subprocess.run([node, "-e", program, str(source)], capture_output=True, text=True, timeout=15, check=False)

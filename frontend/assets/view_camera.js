@@ -436,25 +436,7 @@
     /* Layout ranges can already name the fit while glplot.bounds still
      * clips with the previous dataScale. A ranges relayout with the
      * projection left alone rebuilds that clip box. */
-    if (!mismatch && fitted.ranges && plotlyPrivateStateAllowed()) {
-      var plotForBounds = scene._scene && scene._scene.glplot;
-      var scale = scene._scene && scene._scene.dataScale;
-      var bounds = plotForBounds && plotForBounds.bounds;
-      if (bounds && bounds[0] && bounds[1] && scale) {
-        mismatch = ["x", "y", "z"].some(function (axis, index) {
-          var pair = fitted.ranges[axis];
-          var factor = Number(scale[index]);
-          if (!pair || !Number.isFinite(factor) || factor === 0) return false;
-          var wantMin = Number(pair[0]) * factor;
-          var wantMax = Number(pair[1]) * factor;
-          var span = Math.max(Math.abs(wantMax - wantMin), 1e-6);
-          var haveMin = Number(bounds[0][index]);
-          var haveMax = Number(bounds[1][index]);
-          if (!Number.isFinite(haveMin) || !Number.isFinite(haveMax)) return false;
-          return Math.abs(haveMin - wantMin) / span > 0.02 || Math.abs(haveMax - wantMax) / span > 0.02;
-        });
-      }
-    }
+    if (!mismatch && clipBoxDrift(scene, fitted.ranges)) mismatch = true;
     if (!mismatch && !aspectMismatch) return Promise.resolve();
     var patch = {};
     if (mismatch) {
@@ -486,6 +468,29 @@
     }, function (err) {
       clear();
       return Promise.reject(err);
+    });
+  }
+  function clipBoxDrift(scene, ranges) {
+    /* glplot.bounds is the clip. A box wider than the fitted ranges
+     * keeps drawing the part of a bond that sits past the data box,
+     * and that ink falls outside the Fit margin. Spans can already
+     * match while this clip is still the previous scale. */
+    if (!ranges || !scene || !plotlyPrivateStateAllowed()) return false;
+    var plot = scene._scene && scene._scene.glplot;
+    var scale = scene._scene && scene._scene.dataScale;
+    var bounds = plot && plot.bounds;
+    if (!bounds || !bounds[0] || !bounds[1] || !scale) return false;
+    return ["x", "y", "z"].some(function (axis, index) {
+      var pair = ranges[axis];
+      var factor = Number(scale[index]);
+      if (!pair || !Number.isFinite(factor) || factor === 0) return false;
+      var wantMin = Number(pair[0]) * factor;
+      var wantMax = Number(pair[1]) * factor;
+      var span = Math.max(Math.abs(wantMax - wantMin), 1e-6);
+      var haveMin = Number(bounds[0][index]);
+      var haveMax = Number(bounds[1][index]);
+      if (!Number.isFinite(haveMin) || !Number.isFinite(haveMax)) return false;
+      return Math.abs(haveMin - wantMin) / span > 0.02 || Math.abs(haveMax - wantMax) / span > 0.02;
     });
   }
   function installFittedRangeGuard() {
@@ -863,6 +868,10 @@
           return Math.abs(liveSpan - wantSpan) > 1e-3 * Math.max(wantSpan, 1);
         });
       }
+      /* The same late plot can leave the gl clip on the previous, wider
+       * scale after the layout spans already name the fit. Bonds past
+       * the data box stay painted until that clip is rebuilt. */
+      if (!rangeDrift && clipBoxDrift(scene, frame.ranges)) rangeDrift = true;
       if (!drifted && !rangeDrift) return;
       /* The fit relayout is still inside this plot. A nested relayout is
        * rejected and the rejection used to restore the camera and toast.

@@ -137,6 +137,46 @@ def _assert_framed(backend: ViewerBackend, scene_id: str, projection: str, width
         )
 
 
+def test_fit_target_includes_the_clipped_end_of_a_boundary_stick():
+    """A stick painted up to the axis box is part of the framed target.
+
+    The replica past the box is not. Framing only the atom leaves that
+    clipped end outside the 8% margin on a long cell.
+    """
+
+    scene = {
+        "draw_atoms": [
+            {"cart": [0.0, 0.0, 0.0], "elem": "Na", "radius": 0.4, "_render_visible": True},
+        ],
+        "bonds": [
+            {
+                "i": 0,
+                "j": 0,
+                "start": [0.0, 0.0, 0.0],
+                "end": [8.0, 0.0, 0.0],
+                "is_minor": False,
+            },
+        ],
+    }
+    style = {
+        "style": "ball_stick",
+        "bond_radius": 0.2,
+        "show_unit_cell": False,
+        "projection": "perspective",
+    }
+    ranges = ((-1.0, 2.0), (-1.0, 1.0), (-1.0, 1.0))
+    points = fit_target_points(scene, style, ranges=ranges, projection="perspective")
+    assert np.any(points[:, 0] > 1.5)
+    hidden = {
+        "style": "ball",
+        "bond_radius": 0.2,
+        "show_unit_cell": False,
+        "projection": "perspective",
+    }
+    bare = fit_target_points(scene, hidden, ranges=ranges, projection="perspective")
+    assert np.all(bare[:, 0] < 1.5)
+
+
 def test_fit_frames_cubic_elongated_triclinic_and_molecule(tmp_path: Path):
     triclinic = tmp_path / "triclinic.cif"
     triclinic.write_text(TRICLINIC, encoding="utf-8")

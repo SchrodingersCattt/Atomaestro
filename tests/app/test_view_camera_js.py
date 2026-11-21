@@ -1111,3 +1111,104 @@ function flushLastWriter() {
 """
     result = subprocess.run([node, "-e", program, str(source)], capture_output=True, text=True, timeout=15, check=False)
     assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_late_plot_rebuilds_a_clip_box_that_is_wider_than_the_fit():
+    """Spans can already match while glplot.bounds still clips the previous scale."""
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is needed to execute the frontend regression")
+    source = Path(__file__).resolve().parents[2] / "frontend" / "assets" / "view_camera.js"
+    program = r"""
+const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
+const EventEmitter = require('node:events');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const ranges = {x: [-1.67, 23.93], y: [-0.66, 6.0], z: [-0.66, 6.0]};
+const gd = new EventEmitter();
+function glplot() {
+  return {
+    aspect: {x: 1, y: 0.26, z: 0.26},
+    bounds: [[-8, -4, -4], [40, 12, 12]],
+    setAspectratio(aspect) { this.aspect = {x: Number(aspect.x), y: Number(aspect.y), z: Number(aspect.z)}; },
+    getAspectratio() { return this.aspect; },
+  };
+}
+Object.assign(gd, {
+  layout: {
+    scene: {
+      aspectmode: 'manual',
+      aspectratio: {x: 1, y: 0.26, z: 0.26},
+      camera: {projection: {type: 'perspective'}},
+      xaxis: {range: ranges.x.slice()},
+      yaxis: {range: ranges.y.slice()},
+      zaxis: {range: ranges.z.slice()},
+    },
+    meta: {mattervis_render: {scene_id: 'cell', scene_generation: 1, camera_revision: 0}},
+  },
+  data: [{type: 'scatter3d', x: [0], y: [0], z: [0]}],
+  _fullLayout: {scene: {
+    aspectmode: 'manual',
+    aspectratio: {x: 1, y: 0.26, z: 0.26},
+    xaxis: {range: ranges.x.slice(), autorange: false},
+    yaxis: {range: ranges.y.slice(), autorange: false},
+    zaxis: {range: ranges.z.slice(), autorange: false},
+    _scene: {dataScale: [1, 1, 1]},
+  }},
+});
+gd._fullLayout.scene._scene.glplot = glplot();
+gd._fullLayout.scene._scene.getCamera = () => ({
+  eye: {x: 0.67, y: 0.56, z: 0.47},
+  center: {x: 0.1, y: 0, z: -0.1},
+  up: {x: 0, y: 0, z: 1},
+  projection: {type: 'perspective'},
+});
+const patches = [];
+const status = {hidden: true, textContent: '', setAttribute() {}};
+const sandbox = {
+  Promise, Object, Array, JSON, Number, String, Date, Math, setTimeout, clearTimeout,
+  window: {Plotly: {
+    relayout(graph, patch) {
+      patches.push(patch);
+      const scene = graph._fullLayout.scene;
+      ['x', 'y', 'z'].forEach((axis, index) => {
+        const pair = patch['scene.' + axis + 'axis.range'];
+        if (!pair) return;
+        scene[axis + 'axis'].range = [Number(pair[0]), Number(pair[1])];
+        scene[axis + 'axis'].autorange = false;
+        const gl = scene._scene.glplot;
+        gl.bounds[0][index] = Number(pair[0]);
+        gl.bounds[1][index] = Number(pair[1]);
+      });
+      return Promise.resolve();
+    },
+    react() { return Promise.resolve(); },
+  }},
+  document: {getElementById: (id) => id === 'mv-render-status' ? status : (id === 'crystal-graph' ? {querySelector: () => gd} : null)},
+};
+vm.createContext(sandbox);
+vm.runInContext(source, sandbox);
+const api = sandbox.window.MatterVisViewCamera;
+(async () => {
+  assert.equal(await api.applyAsync({
+    eye: {x: 0.67, y: 0.56, z: 0.47},
+    center: {x: 0.1, y: 0, z: -0.1},
+    up: {x: 0, y: 0, z: 1},
+    projection: {type: 'perspective'},
+  }, {
+    scene_id: 'cell', scene_generation: 1, camera_version: 1, command: 'fit',
+    aspectratio: {x: 1, y: 0.26, z: 0.26}, ranges,
+  }), true);
+  gd._fullLayout.scene._scene.glplot.bounds = [[-8, -4, -4], [40, 12, 12]];
+  gd.emit('plotly_afterplot');
+  await Promise.resolve();
+  await Promise.resolve();
+  const rangePatch = patches.find((patch) => patch['scene.xaxis.range']);
+  assert.ok(rangePatch, 'a wider clip box scheduled a range relayout');
+  assert.deepEqual(rangePatch['scene.xaxis.range'], ranges.x);
+  const bounds = gd._fullLayout.scene._scene.glplot.bounds;
+  assert.ok(Math.abs(bounds[1][0] - ranges.x[1]) < 1e-6);
+  assert.equal(status.textContent, '');
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+"""
+    result = subprocess.run([node, "-e", program, str(source)], capture_output=True, text=True, timeout=15, check=False)
+    assert result.returncode == 0, result.stderr or result.stdout

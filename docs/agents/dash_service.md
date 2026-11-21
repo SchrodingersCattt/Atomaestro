@@ -361,7 +361,11 @@ Notes for callers:
   when eye distance alone leaves the target smaller than the margin.
   The cell boundary selects unit-cell corners as the target, expanded by
   the cell-edge tube radius so the stroke is inside the margin. With the
-  boundary off, the target is the drawn atom extent. Orthographic extent
+  boundary off, the target is the drawn atom extent. Stick, wireframe,
+  and flat-illustration drawings also include each visible bond, expanded
+  by the radius that trace uses. A bond that crosses the axis box is
+  clipped to that box first, because the mesh stops there and a replica
+  past the box is not painted. Orthographic extent
   is the sphere's silhouette in the camera plane. Perspective extent is
   the tangent cone of that sphere, recomputed at the solved eye, so a
   close sphere is not clipped past its equator. The stored camera is

@@ -675,3 +675,43 @@ def test_main_graph_disables_plotly_double_click_reset(tmp_path):
 
     assert graph is not None
     assert graph.config.get("doubleClick") is False
+
+
+def test_scene_resync_keeps_the_figure_when_a_camera_row_is_newer():
+    """A later camera envelope must not hide the geometry frame on tab return."""
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is needed to execute the frontend regression")
+    program = r"""
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync(process.argv[1],'utf8');
+const stop=source.indexOf('  // ── Right-click menu');
+const prefix=source.slice(0,stop);
+const sandbox={console,Date,JSON,Number,String,Object,Array,Promise,setTimeout:()=>{},clearTimeout:()=>{},
+  requestAnimationFrame:()=>{},MutationObserver:function(){this.observe=()=>{};},
+  window:{Plotly:null,WebSocket:null,location:{protocol:'http:',host:'localhost'},
+    dash_clientside:{set_props:()=>true}},
+  document:{getElementById:()=>null,querySelectorAll:()=>[],addEventListener:()=>{}}};
+vm.createContext(sandbox);
+vm.runInContext(prefix+'window.testScene={sceneResyncPayloads};})();',sandbox);
+const choose=sandbox.window.testScene.sceneResyncPayloads;
+const figure={scene_id:'ionic',type:'figure',figure:{data:[{}]}};
+const camera={scene_id:'ionic',type:'view_update',kind:'camera'};
+const chosen=choose([figure, camera]);
+assert.equal(chosen.length, 2);
+assert.equal(chosen[0], figure);
+assert.equal(chosen[1], camera);
+const cameraOnly=choose([camera]);
+assert.equal(cameraOnly.length, 1);
+assert.equal(cameraOnly[0], camera);
+const figureOnly=choose([figure]);
+assert.equal(figureOnly.length, 1);
+assert.equal(figureOnly[0], figure);
+"""
+    result = subprocess.run(
+        [node, "-e", program, str(MATTERVIS_JS)],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr

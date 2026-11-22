@@ -95,5 +95,11 @@ When a scene has no saved camera, the mixed camera envelope contains only
 the requested projection; the saved camera remains unset and the browser
 keeps its live pose.
 
+A tab resync reads that scene's journal from the beginning. The newest row
+can be a camera envelope published after the geometry frame. The resync
+applies the newest figure for the scene first, then that later camera
+envelope. A camera envelope alone cannot paint a canvas that is still
+showing another scene.
+
 For local baseline measurements, `window.__mv_view_diag` reports submissions,
 full frames, local patches, camera updates, and stale drops.

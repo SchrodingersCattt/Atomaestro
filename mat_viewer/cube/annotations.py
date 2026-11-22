@@ -19,8 +19,8 @@ def _plotly_go():
         import plotly.graph_objects as go
     except ImportError as exc:
         raise ImportError(
-            "Plotly cube traces require `pip install matter-vis[plotly]`. "
-            "CPU cube rendering requires only `matter-vis[cube]`."
+            "Plotly cube traces require `pip install atomaestro[plotly]`. "
+            "CPU cube rendering requires only `atomaestro[cube]`."
         ) from exc
     return go
 

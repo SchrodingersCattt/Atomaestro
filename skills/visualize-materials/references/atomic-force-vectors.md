@@ -50,7 +50,7 @@ arrow. Use the ratio fields instead when proportional arrowheads are desired.
 
 ## Make the field subordinate
 
-Render the structure, field mesh, and vectors in one MatterVis scene so they
+Render the structure, field mesh, and vectors in one Atomaestro scene so they
 share the camera and depth buffer. Do not draw arrows after export.
 
 Choose the isovalue from a small, recorded sweep on the real field. Prefer the

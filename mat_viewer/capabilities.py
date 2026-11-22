@@ -1,4 +1,4 @@
-"""Dependency capability registry for MatterVis.
+"""Dependency capability registry for Atomaestro.
 
 This module is intentionally limited to the Python standard library.  It is
 safe to import in a minimal installation and is the single source of truth for
@@ -16,8 +16,8 @@ from typing import Iterable, Mapping
 
 CAPABILITIES_SCHEMA = "mattervis.capabilities/v1"
 RESOLUTION_SCHEMA = "mattervis.requirements/v1"
-DIST_NAME = "matter-vis"
-GPU_INSTALL = 'python -m pip install "matter-vis[gpu]"'
+DIST_NAME = "atomaestro"
+GPU_INSTALL = 'python -m pip install "atomaestro[gpu]"'
 MOLCRYSKIT_MINIMUM = "0.8.0"
 # Exclusive upper bound of the numeric window CI still checks. The
 # development pin below is a git commit, not a pretend PyPI release:
@@ -495,7 +495,7 @@ def _normalise_requirements(
 
 
 def install_command(extras: Iterable[str] = ()) -> str:
-    """Return the exact pip command for a set of MatterVis extras."""
+    """Return the exact pip command for a set of Atomaestro extras."""
 
     selected = sorted({str(extra) for extra in extras if extra})
     target = DIST_NAME if not selected else f"{DIST_NAME}[{','.join(selected)}]"

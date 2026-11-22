@@ -1,7 +1,7 @@
 # Coordination Topology Figures
 
 Generate each structure or coordination panel as a separate verified
-MatterVis CPU artifact. The current agent CLI deliberately does not expose the
+Atomaestro CPU artifact. The current agent CLI deliberately does not expose the
 legacy dense-coordination compositor or any `--publication-*` preset.
 
 ```bash

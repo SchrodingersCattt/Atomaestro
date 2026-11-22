@@ -42,7 +42,7 @@ isosurfaces, and any multi-panel comparison of scalar fields.
 
 ## Required rendering workflow
 
-1. Render every cube as a separate MatterVis image.
+1. Render every cube as a separate Atomaestro image.
 2. Set a common value with `--isovalue VALUE` for comparable fields. Use
   `--isosurface-opacity VALUE` when that choice is scientifically intended.
   Do not pass `--periodic-isosurface`; `mat-vis render` rejects it.

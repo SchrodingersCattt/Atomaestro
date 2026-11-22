@@ -7,7 +7,7 @@ Prepare equilibrium Cartesian positions and Cartesian displacements with shape
 `L[:, m].reshape(N, 3)`, matched to `$vibrational_frequencies`; do not use
 `L[m, :]`.
 
-Keep arrow origins at the source-frame equilibrium atom coordinates. MatterVis
+Keep arrow origins at the source-frame equilibrium atom coordinates. Atomaestro
 handles synthetic-cell translation. For vibrations use `"anchor":"center"`, so
 the visible arrow midpoint is the atom; do not pre-shift origins.
 

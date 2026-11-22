@@ -2,7 +2,10 @@
 
 Atomaestro renders atomistic structures and trajectories without launching the
 browser viewer. Every input format is parsed into the same canonical structure
-frame before scene construction.
+frame before scene construction. The command remains `mat-vis`. The
+published 0.0.6 release is `matter-vis`. Optional extras in this checkout
+use the unpublished `atomaestro` distribution. See
+[the migration guide](rebranding.md).
 
 ## Quick start
 
@@ -287,9 +290,12 @@ the numeric base renderer. PNG, GIF, and MP4 can all use the batch path.
 | .mp4 | H.264 animation | CPU or native GPU, plus `[animation]` |
 
 Use `--backend cpu|matplotlib|plotly|gpu`; there is no backend or representation fallback.
-The `gpu` backend is opt-in for PNG, GIF, and MP4. Install
-`matter-vis[gpu]` (and `matter-vis[animation]` for GIF/MP4) and verify a
-usable adapter with `mat-vis capabilities --require gpu --json` before
+The `gpu` backend is opt-in for PNG, GIF, and MP4. The published 0.0.6
+extra is `matter-vis[gpu]` (and `matter-vis[animation]` for GIF/MP4). This
+source checkout installs the same extras with `python -m pip install -e ".[gpu]"`
+and `python -m pip install -e ".[animation]"`. `atomaestro[gpu]` and
+`atomaestro[animation]` are the commands only after `atomaestro` is on PyPI.
+Verify a usable adapter with `mat-vis capabilities --require gpu --json` before
 rendering. Transparent primitives, dashed lines, text, per-vertex mesh
 colors, per-endpoint line colors, and cube isosurface meshes fail explicitly.
 Opaque meshes, instanced spheres, cylinders, and solid ellipsoids are drawn
@@ -688,8 +694,10 @@ coordinates use `qhull_numerical_failure` as well.
 
 ## `serve` — Browser viewer
 
-Requires `python -m pip install "matter-vis[web]"`; this extra includes Plotly
-and `dash>=2.18.2`.
+The published extra is `python -m pip install "matter-vis[web]==0.0.6"`.
+This source checkout uses `python -m pip install -e ".[web]"`.
+`python -m pip install "atomaestro[web]"` is the command only after
+`atomaestro` is on PyPI. The extra includes Plotly and `dash>=2.18.2`.
 
 Dash 2.18.2 through 3.x accept only a string for `dcc.Tab.label`. Those
 releases show each scene name as that string and place the per-tab close
@@ -720,10 +728,13 @@ mat-vis serve [options]
 
 ## tui — Terminal view
 
-Ordinary structure input requires `python -m pip install "matter-vis[tui]"`.
-Cube input requires the combined
-`python -m pip install "matter-vis[cube,tui]"`; resolve it with
-`mat-vis capabilities --require cube tui --json`. Use `mat-vis inspect --json`
+Ordinary structure input on the published release requires
+`python -m pip install "matter-vis[tui]==0.0.6"`. This source checkout uses
+`python -m pip install -e ".[tui]"`. `python -m pip install "atomaestro[tui]"`
+is the command only after `atomaestro` is on PyPI. Cube input on the published
+release is `python -m pip install "matter-vis[cube,tui]==0.0.6"`; this checkout
+uses `python -m pip install -e ".[cube,tui]"`. Resolve the checkout command
+with `mat-vis capabilities --require cube tui --json`. Use `mat-vis inspect --json`
 for normal bounded agent diagnosis without installing Textual.
 
 Open any supported structure or one trajectory frame without starting Dash:

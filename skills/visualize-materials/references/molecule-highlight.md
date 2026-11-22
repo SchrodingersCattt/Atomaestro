@@ -3,10 +3,10 @@
 Read this only when one complete molecule or fragment must be highlighted over
 structural context.
 
-MatterVis has no render `--highlight-molecule-index` flag. This is a public
+Atomaestro has no render `--highlight-molecule-index` flag. This is a public
 Python/API workflow.
 
-Use `mat_viewer.load_structure`. MatterVis consumes MolCrysKit and records its
+Use `mat_viewer.load_structure`. Atomaestro consumes MolCrysKit and records its
 native molecule identity as
 `fragment_table[*].source_molecule_index`; it also supplies continuous
 `mol_cart_positions`, canonical bonds, and whole-fragment boundary replicas.
@@ -28,7 +28,7 @@ For wireframe context with one ball-stick molecule:
 3. override those atoms with `material="mesh"` and `style="ball_stick"`;
 4. preserve real element names and canonical scene bonds.
 
-MatterVis currently has no `--highlight-molecule-index` render flag. For a
+Atomaestro currently has no `--highlight-molecule-index` render flag. For a
 mixed scene, combine public `atom_groups` with `bond_groups`: resolve the target
 MolCrysKit identity to canonical atom labels or indices, keep discrete covalent
 components as ball-stick, and hide or fade only selected context bonds by

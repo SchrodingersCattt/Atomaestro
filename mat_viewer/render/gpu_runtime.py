@@ -52,7 +52,7 @@ def _import_wgpu() -> Any:
     if not _wgpu_spec_available():
         raise GPUUnavailableError(
             "The GPU backend requires the optional 'wgpu' package; install "
-            "matter-vis[gpu]."
+            "atomaestro[gpu]."
         )
     try:
         return importlib.import_module("wgpu")

@@ -5,8 +5,8 @@ Examples from the repository root:
     python scripts/06_cp2k_cube_orbital.py density.cube -o density.png
     python scripts/06_cp2k_cube_orbital.py density.cube -o density.html --backend plotly
 
-Cube mesh extraction requires ``matter-vis[cube]``. The Plotly example also
-requires ``matter-vis[plotly]``; no backend or output fallback is attempted.
+Cube mesh extraction requires ``atomaestro[cube]``. The Plotly example also
+requires ``atomaestro[plotly]``; no backend or output fallback is attempted.
 """
 
 from __future__ import annotations

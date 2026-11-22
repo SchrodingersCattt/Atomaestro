@@ -8,10 +8,11 @@ scalar controls and repeatable selector rules for mixed styles.
 |---|---|
 | Display mode | `--view` |
 | Unit-cell boundary replicas | `--include-boundary-replicas` / `--no-boundary-replicas` |
-| Camera axis, direction, position, target, up, projection, fit distance, FOV, orthographic scale, camera fit, and clipping | `--camera-axis`, `--view-direction`, `--camera-position`, `--camera-target`, `--camera-up`, `--orthogonal` / `--perspective`, `--camera-distance`, `--field-of-view`, `--ortho-scale`, `--camera-fit`, `--camera-clip` |
+| Camera axis, direction, position, target, up, projection, fit distance, FOV, orthographic scale, zoom, framing margin, and clipping | `--camera-axis`, `--view-direction`, `--camera-position`, `--camera-target`, `--camera-up`, `--orthogonal` / `--perspective`, `--camera-distance`, `--field-of-view`, `--ortho-scale`, `--zoom`, `--framing-margin`, `--camera-clip` |
 | Representation, shading, backend, canvas, background, atom/bond scale, visibility, cell, labels, rings, and ORTEP | Direct `mat-vis render` flags |
 | Blinn–Phong surface preset for CPU atoms, bonds, and isosurfaces | `--surface-material matte\|hard_plastic\|metal_like\|glass_like` |
 | Cube isosurface mode, phase colors, stride, shared shading material, and a second scalar cube sampled in physical coordinates | `--isosurface-mode`, `--isosurface-material`, `--isosurface-ambient`, `--isosurface-diffuse`, `--isosurface-specular`, `--isosurface-shininess`, `--isosurface-color-cube`, `--isosurface-color-range`, `--isosurface-color-center`, `--isosurface-colormap`, and the other `--isosurface-*` flags |
+| Cube isosurface mode, phase colors, stride, material, a second scalar cube sampled in physical coordinates, and an opt-in density ceiling | `--isosurface-mode`, `--isosurface-color-cube`, `--isosurface-color-range`, `--isosurface-color-center`, `--isosurface-colormap`, `--isosurface-density-mask`, `--isosurface-density-cube`, `--isosurface-density-cutoff`, and the other `--isosurface-*` flags. `--periodic-isosurface` is rejected: CPU meshes do not close cell faces |
 | Sphere and cylinder mesh quality | `--sphere-detail`, `--cylinder-sides` |
 | CPU lighting rig (`studio_soft`, `unlit`; `studio_three_point` is rejected on CPU) | `--lighting` |
 | Per-atom selector styles and materials | Repeatable `--atom-group` |
@@ -27,6 +28,7 @@ scalar controls and repeatable selector rules for mixed styles.
 
 Intentionally programmatic objects remain API-only: a precompiled `RenderPlan`
 and arbitrary in-memory `topology_data`. They are composition artifacts rather
-than omitted end-user controls. `mat-vis render --check --json` reports the
-normalized camera, mesh-quality settings, and selector groups without loading
-the source.
+than omitted end-user controls. `camera_fit` is a style field described in
+`scene_api.md`, not a `mat-vis render` flag. `mat-vis render --check --json`
+reports the normalized camera, including `zoom` and `framing_margin`,
+mesh-quality settings, and selector groups without loading the source.

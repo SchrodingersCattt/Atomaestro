@@ -105,7 +105,25 @@
     const graph=document.getElementById('crystal-graph');
     if(graph && typeof graph.appendChild==='function' && next.parentElement!==graph) graph.appendChild(next);
   }
-  root.MatterVisSelectionDock={teardown:teardownDockWatch, layout:layoutDock};
+  function reserveGutter(open){
+    // Claim the column before the selection is observable. The canvas
+    // relayout that follows a padding change moves projected hits; a pick
+    // recorded against the previous box misses once that relayout lands.
+    const width=Math.min(dockWidth(), Math.round((window.innerWidth||800)*0.4));
+    placeChrome(!!open, width);
+    const api=window.MatterVisPanelResize;
+    if(api && typeof api.resizeScene==='function') api.resizeScene();
+    if(api && typeof api.whenSceneSized==='function') return api.whenSceneSized();
+    return Promise.resolve();
+  }
+  function afterGutter(open, done){
+    let pending;
+    try { pending = reserveGutter(open); }
+    catch (err) { pending = null; }
+    if(pending && typeof pending.then==='function') pending.then(function(){done();}, function(){done();});
+    else done();
+  }
+  root.MatterVisSelectionDock={teardown:teardownDockWatch, layout:layoutDock, reserve:reserveGutter, afterGutter:afterGutter};
   function refitDock(){
     layoutDock();
     const run=function(){
@@ -120,6 +138,14 @@
     const shown=!!(panel && !panel.hidden);
     if(shown===dockShown){layoutDock();return;}
     dockShown=shown;
+    // reserve() already set this padding and waited for the relayout. A
+    // second refit after the selection is observable would move the next
+    // pick's pixels.
+    const center=document.getElementById('center-panel');
+    const width=Math.min(dockWidth(), Math.round((window.innerWidth||800)*0.4));
+    const expected=shown ? width+'px' : '';
+    const reserved=!!(center && center.style && (center.style.paddingRight||'')===expected);
+    if(reserved){layoutDock();return;}
     refitDock();
   }
   function concealDock(){

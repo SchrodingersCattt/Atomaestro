@@ -464,3 +464,102 @@ def test_poll_keeps_an_inflight_control_until_the_server_moves(tmp_path, monkeyp
     finally:
         backend.close()
 
+
+def test_capture_state_keeps_one_control_when_the_filled_scene_lags(tmp_path, monkeypatch):
+    """A control edited after the tab changed is stored on the selected scene.
+
+    The filled-scene record still names the previous scene, so the sidebar
+    values belong to that scene. Only the control that fired may change.
+    A batched tab refresh still writes nothing.
+    """
+    backend = ViewerBackend(
+        preset_path=str(tmp_path / "preset.json"), root_dir=str(tmp_path)
+    )
+    try:
+        first_id = backend.active_scene_id()
+        backend.patch_state(
+            {
+                "material": "flat",
+                "style": "stick",
+                "display_options": ["labels"],
+            },
+            scene_id=first_id,
+            broadcast=False,
+        )
+        registry = _CallbackRegistry()
+        callbacks_state.register_state_callbacks(registry, backend)
+        second_id = backend.create_scene(
+            structure=backend.get_state()["structure"], label="Second scene"
+        )["id"]
+        backend.patch_state(
+            {
+                "material": "mesh",
+                "style": "ball_stick",
+                "display_options": ["axes", "hydrogens"],
+            },
+            scene_id=second_id,
+            broadcast=False,
+        )
+        capture = registry.callbacks["capture_state"]
+
+        def run(trigger, material, render_style, display_options):
+            monkeypatch.setattr(
+                callbacks_state,
+                "callback_context",
+                SimpleNamespace(triggered=[{"prop_id": item} for item in trigger]),
+            )
+            return capture(
+                second_id,
+                "formula_unit",
+                display_options,
+                9.0,
+                9.0,
+                0.9,
+                material,
+                render_style,
+                "hide",
+                "ortep_axes",
+                9.0,
+                None,
+                [],
+                [],
+                "auto",
+                None,
+                "viridis",
+                "auto",
+                None,
+                None,
+                None,
+                "#BDBDBD",
+                ["show"],
+            )
+
+        batched = run(
+            ["material-selector.value", "scene-tabs.value"],
+            "flat",
+            "stick",
+            ["labels"],
+        )
+        assert batched == (no_update, no_update, no_update)
+        assert backend.get_state(second_id)["material"] == "mesh"
+        assert backend.get_state(first_id)["material"] == "flat"
+
+        run(["material-selector.value"], "flat", "stick", ["labels"])
+        selected = backend.get_state(second_id)
+        assert selected["material"] == "flat"
+        assert selected["style"] == "ball_stick"
+        assert "axes" in selected["display_options"]
+        assert selected["atom_scale"] != 9.0
+        assert backend.get_state(first_id)["style"] == "stick"
+        assert backend.get_state(first_id)["display_options"] == ["labels"]
+
+        run(["display-options.value"], "mesh", "stick", ["hydrogens"])
+        selected = backend.get_state(second_id)
+        assert selected["material"] == "flat"
+        assert "axes" not in selected["display_options"]
+        assert "hydrogens" in selected["display_options"]
+        assert backend.get_state(first_id)["material"] == "flat"
+        assert backend.get_state(first_id)["display_options"] == ["labels"]
+    finally:
+        backend.close()
+

@@ -12,7 +12,10 @@ shared sidebar. Rewriting the payload to an empty update leaves the newer
 interaction in place. The next poll carries the new generation.
 
 A tab click or upload batched into the same request is that interaction's
-own sync and must still apply.
+own sync and must still apply. A scene-tab control sync is tracked by
+epoch only: the tab click itself sets the unacked flag, so that flag must
+not drop the tab's own response. A later edit bumps the epoch, and the
+late sync is dropped so it cannot put the previous controls back.
 */
 (function (root) {
   var MODIFIERS = {Shift: 1, Control: 1, Alt: 1, Meta: 1};
@@ -133,6 +136,23 @@ own sync and must still apply.
     }
   }
 
+  function isSceneControlSync(body) {
+    if (!body || typeof body !== "object") return false;
+    var changed = body.changedPropIds || [];
+    var names = [];
+    var index;
+    for (index = 0; index < changed.length; index += 1) {
+      names.push(String(changed[index]).split(".")[0]);
+    }
+    if (names.indexOf("scene-tabs") === -1) return false;
+    if (names.indexOf("agent-state-poll") !== -1) return false;
+    if (names.indexOf("native-upload-sync") !== -1) return false;
+    var rendered = JSON.stringify(body.output == null ? "" : body.output);
+    return rendered.indexOf("material-selector") !== -1
+      || rendered.indexOf("display-options") !== -1
+      || rendered.indexOf("agent-state-store") !== -1;
+  }
+
   function requestFence(bodyText, live) {
     if (typeof bodyText !== "string" || !bodyText) return null;
     var body;
@@ -150,9 +170,31 @@ own sync and must still apply.
     };
   }
 
+  function sceneSyncFence(bodyText, live) {
+    if (typeof bodyText !== "string" || !bodyText) return null;
+    var body;
+    try {
+      body = JSON.parse(bodyText);
+    } catch (error) {
+      return null;
+    }
+    if (!isSceneControlSync(body)) return null;
+    var snapshot = live || liveFence();
+    return {
+      epoch: Number(snapshot.epoch || 0),
+      scene: snapshot.scene ? String(snapshot.scene) : "",
+      kind: "scene-sync",
+    };
+  }
+
   function responseIsStale(tracked, live) {
     if (!tracked) return false;
     var now = live || liveFence();
+    // The tab click sets unacked before its own sync leaves. Drop that
+    // response only when a later edit has moved the epoch.
+    if (tracked.kind === "scene-sync") {
+      return Number(now.epoch || 0) !== Number(tracked.epoch || 0);
+    }
     // Sent while an edit or tab callback was still open, or one opened
     // before this response could be applied.
     if (Number(tracked.unacked || 0) > 0) return true;
@@ -226,8 +268,12 @@ own sync and must still apply.
       var userWriteEpoch = 0;
       if (String(url).indexOf("_dash-update-component") !== -1) {
         var live = liveFence();
-        tracked = requestFence(bodyText, live);
-        if (!tracked && isUserWrite(bodyText)) {
+        var pollTracked = requestFence(bodyText, live);
+        tracked = pollTracked || sceneSyncFence(bodyText, live);
+        // A scene-tab sync is tracked and is also the tab click's own
+        // write. Polls stay excluded so a mixed poll cannot release the
+        // unacked flag early.
+        if (!pollTracked && isUserWrite(bodyText)) {
           userWrite = true;
           userWriteEpoch = Number(live.epoch || 0);
           root.__mvUserWrites = Number(root.__mvUserWrites || 0) + 1;
@@ -278,6 +324,7 @@ own sync and must still apply.
     sceneIdFromNode: sceneIdFromNode,
     isAgentStatePoll: isAgentStatePoll,
     requestFence: requestFence,
+    sceneSyncFence: sceneSyncFence,
     responseIsStale: responseIsStale,
     blankPollPayload: blankPollPayload,
     isUserWrite: isUserWrite,

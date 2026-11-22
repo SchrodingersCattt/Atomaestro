@@ -117,3 +117,133 @@ async function flush() {
         check=False,
     )
     assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_gutter_reserve_publishes_only_after_the_relayout_settles():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is needed to execute the frontend regression")
+    root = Path(__file__).resolve().parents[2] / "frontend" / "assets"
+    program = r"""
+const fs = require('node:fs');
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const center = {
+  id: 'center-panel',
+  style: {},
+  clientWidth: 800,
+  clientHeight: 600,
+};
+const plot = {
+  id: 'crystal-graph',
+  classList: {contains(name) { return name === 'js-plotly-plot'; }},
+  style: {},
+  _fullLayout: {},
+  querySelector() { return null; },
+};
+let frame = null;
+let releaseRelayout = null;
+let relayouts = 0;
+let geometry = 'before';
+const sandbox = {
+  console, Date, JSON, Number, String, Object, Array, Promise, Math, Error,
+  setTimeout() {}, clearTimeout() {}, setInterval() {}, clearInterval() {},
+  devicePixelRatio: 1,
+  innerWidth: 1280,
+  innerHeight: 800,
+  addEventListener() {},
+  removeEventListener() {},
+  requestAnimationFrame(fn) { frame = fn; return 1; },
+  ResizeObserver: function () { this.observe = function () {}; this.disconnect = function () {}; },
+  MutationObserver: function () { this.observe = function () {}; this.disconnect = function () {}; },
+  getComputedStyle(el) {
+    const padding = el && el.style && el.style.paddingRight ? el.style.paddingRight : '0';
+    return {
+      getPropertyValue() { return '290'; },
+      paddingLeft: '0',
+      paddingRight: padding,
+      paddingTop: '0',
+      paddingBottom: '0',
+    };
+  },
+  document: {
+    readyState: 'loading',
+    body: {appendChild() {}},
+    documentElement: {},
+    addEventListener() {},
+    createElement() { return {style: {}, appendChild() {}, setAttribute() {}}; },
+    createTextNode() { return {}; },
+    getElementById(id) {
+      if (id === 'center-panel') return center;
+      if (id === 'crystal-graph') return plot;
+      return null;
+    },
+  },
+  Plotly: {
+    relayout(node, layout) {
+      relayouts += 1;
+      return new Promise(function (resolve) {
+        releaseRelayout = function () {
+          geometry = layout.width + 'x' + layout.height;
+          resolve();
+        };
+      });
+    },
+  },
+};
+sandbox.window = sandbox;
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);
+vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);
+const dock = sandbox.MatterVisSelectionDock;
+assert.equal(typeof dock.afterGutter, 'function');
+let seen = null;
+let second = null;
+let relayoutsBeforeSecond = 0;
+dock.afterGutter(true, function () { seen = geometry; });
+Promise.resolve().then(function () {
+  assert.equal(seen, null, 'the pick must wait for the gutter relayout');
+  assert.equal(relayouts, 1);
+  assert.equal(center.style.paddingRight, '290px');
+  releaseRelayout();
+  return Promise.resolve();
+}).then(function () {
+  assert.equal(seen, null, 'the follow-up frame still has to settle');
+  assert.equal(typeof frame, 'function');
+  const pending = frame;
+  frame = null;
+  pending();
+  return Promise.resolve();
+}).then(function () {
+  assert.equal(seen, '510x600');
+  assert.equal(geometry, '510x600');
+  relayoutsBeforeSecond = relayouts;
+  dock.afterGutter(true, function () { second = geometry; });
+  assert.equal(second, null);
+  assert.equal(relayouts, relayoutsBeforeSecond, 'a reserved gutter must not relayout again');
+  assert.equal(typeof frame, 'function');
+  const follow = frame;
+  frame = null;
+  follow();
+  return Promise.resolve();
+}).then(function () {
+  assert.equal(second, '510x600');
+  assert.equal(relayouts, relayoutsBeforeSecond);
+  process.exit(0);
+}).catch(function (error) {
+  console.error(error);
+  process.exit(1);
+});
+setTimeout(function () {
+  console.error('gutter reserve did not settle');
+  process.exit(1);
+}, 1000);
+"""
+    result = subprocess.run(
+        ["node", "-e", program, str(root / "panel_resize.js"), str(root / "selection_appearance.js")],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout

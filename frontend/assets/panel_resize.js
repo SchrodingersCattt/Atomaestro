@@ -20,6 +20,7 @@
   let resizeFrame = 0;
   let resizeAgain = false;
   let refitAfterResize = false;
+  let settleWaiters = [];
 
   function graphNode() {
     const graph = document.getElementById("crystal-graph");
@@ -49,6 +50,16 @@
     return {width: width, height: height};
   }
 
+  function sceneResizeBusy() {
+    return resizingScene || resizeAgain || resizeFrame;
+  }
+
+  function pumpSettle() {
+    if (sceneResizeBusy() || !settleWaiters.length) return;
+    const waiters = settleWaiters.splice(0);
+    waiters.forEach(function (fn) { fn(); });
+  }
+
   function finishSceneResize() {
     resizingScene = false;
     redrawCompass();
@@ -57,12 +68,14 @@
       resizeAgain = false;
       updateCompactLayout();
       fitPanels();
+      pumpSettle();
       return;
     }
     if (resizeAgain) {
       resizeAgain = false;
       resizeSceneNow();
     }
+    pumpSettle();
   }
 
   function resizeSceneNow() {
@@ -131,6 +144,17 @@
     resizeFrame = window.requestAnimationFrame(function () {
       resizeFrame = 0;
       resizeSceneNow();
+      pumpSettle();
+    });
+  }
+
+  function whenSceneSized() {
+    // Resolves once the in-flight width/height relayout and its follow-up
+    // frame have both finished. A pick published earlier than that is
+    // measured against a viewport the relayout is about to replace.
+    if (!sceneResizeBusy()) return Promise.resolve();
+    return new Promise(function (resolve) {
+      settleWaiters.push(resolve);
     });
   }
 
@@ -466,7 +490,10 @@
   }
   function panelMutationIsStatusChrome(mutation) {
     const el = mutationElement(mutation && mutation.target);
-    return !!(el && el.closest && el.closest("#mv-status-bar, #mv-render-status, #mv-status-busy"));
+    // The atom list is rewritten with the status line. It does not change
+    // the canvas box, and refitting on that mutation loops a relayout back
+    // through the figure settle path.
+    return !!(el && el.closest && el.closest("#mv-status-bar, #mv-render-status, #mv-status-busy, #atom-list"));
   }
   function attachPanelObserver() {
     const root = document.getElementById("viewer-root") || document.body;
@@ -487,5 +514,6 @@
   window.MatterVisPanelResize = {
     fitPanels: fitPanels,
     resizeScene: resizeScene,
+    whenSceneSized: whenSceneSized,
   };
 })();

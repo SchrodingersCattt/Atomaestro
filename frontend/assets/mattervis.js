@@ -1235,12 +1235,42 @@
       const commandArrived = !!(latest && latest !== commandAtStart);
       const after = window.mattervisCurrentCamera ? window.mattervisCurrentCamera(gd) : null;
       const commandWins = commandArrived || newerCameraCommand(gd);
+      /* This relayout puts back a camera the size replot moved. Dash's
+       * relayoutData callback must not treat it as a user camera edit. */
+      function ownedRelayout(patch) {
+        if (!patch) return Promise.resolve();
+        const emit = gd && typeof gd.emit === "function" ? gd.emit : null;
+        if (gd) gd.__mvRestoringDrag = true;
+        if (emit) {
+          gd.emit = function (eventName) {
+            if (eventName === "plotly_relayout") return gd;
+            return emit.apply(this, arguments);
+          };
+        }
+        const restoreEmit = function () {
+          if (emit && gd.emit !== emit) gd.emit = emit;
+          if (gd) gd.__mvRestoringDrag = false;
+        };
+        let pending;
+        try {
+          pending = window.Plotly.relayout(gd, patch);
+        } catch (err) {
+          restoreEmit();
+          return Promise.reject(err);
+        }
+        return Promise.resolve(pending).then(function (value) {
+          restoreEmit();
+          return value;
+        }, function (err) {
+          restoreEmit();
+          return Promise.reject(err);
+        });
+      }
       if (!commandWins && sameSceneDragInProgress(gd)) {
         const sampled = dragSampleCamera();
         const dragPose = sampled && !camerasClose(after, sampled) ? sampled : before;
         if (dragPose && !camerasClose(after, dragPose)) {
-          const dragged = cameraOnlyPatch(dragPose);
-          if (dragged) return Promise.resolve(window.Plotly.relayout(gd, dragged)).catch(function () {});
+          return ownedRelayout(cameraOnlyPatch(dragPose)).catch(function () {});
         }
       }
       if (!latest || !latest.snapshot) return Promise.resolve();
@@ -1249,9 +1279,7 @@
       /* A revision that is already ahead did not have to arrive inside this
        * size wrap. The captured pre-replot eye must not replace it. */
       if (!commandArrived && !commandWasLive && !newerCameraCommand(gd)) return Promise.resolve();
-      const patch = cameraOnlyPatch(latest.snapshot);
-      if (!patch) return Promise.resolve();
-      return Promise.resolve(window.Plotly.relayout(gd, patch)).catch(function () {});
+      return ownedRelayout(cameraOnlyPatch(latest.snapshot)).catch(function () {});
     }
     function wrap(name) {
       const original=window.Plotly[name];
@@ -2521,10 +2549,17 @@
       if(e.button!==0) return;
       down={x:e.clientX,y:e.clientY,scene:currentSceneId(),moved:false};
     },{passive:true});
+    function publishWhenGutterReady(target, mode) {
+      const opening = mode !== "clear" && !!target;
+      const dock = window.MatterVisSelectionDock;
+      const run = function () { publishSemanticSelection(target, mode); };
+      if (!dock || typeof dock.afterGutter !== "function") { run(); return; }
+      dock.afterGutter(opening, run);
+    }
     function select(e){
       const mode=e.ctrlKey||e.metaKey?"toggle":e.shiftKey?"add":"replace";
       function apply(target){
-        publishSemanticSelection(target,target?mode:"clear");
+        publishWhenGutterReady(target, target?mode:"clear");
       }
       function attempt(allowRetry){
         const gd=graphDiv();
@@ -2563,7 +2598,7 @@
     function openContext(e) {
       const target=resolve(e,!!e.altKey);
       pushTarget({kind:target?target.kind:"_global",payload:target,scene_id:currentSceneId(),x:e.clientX,y:e.clientY,ts:Date.now()});
-      if(target) publishSemanticSelection(target,"replace");
+      if(target) publishWhenGutterReady(target,"replace");
     }
     container.addEventListener("contextmenu",function(e){
       if(ignored(e)) return;

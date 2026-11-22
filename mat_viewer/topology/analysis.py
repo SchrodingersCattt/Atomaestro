@@ -26,6 +26,7 @@ from molcrys_kit.structures.polyhedra import (
 )
 
 from ..config import current_config, element_color
+from ..render.retention import remember_analyze_topology
 from ..structure import molcrys_bridge
 from .disorder_policy import (
     DEFAULT_DISORDER_POLICY,
@@ -941,7 +942,7 @@ def analyze_topology(
             fallback_max=fallback,
             disorder_policy=disorder_policy,
         )
-        cache[key] = cached
+        cache = remember_analyze_topology(bundle, cache, key, cached)
     # Display fields shift per call (camera / formula-unit centering); patch
     # them onto a shallow copy so the cache stays generic.
     out = dict(cached)

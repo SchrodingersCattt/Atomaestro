@@ -2013,11 +2013,33 @@
       scheduleQueuedSceneFigureSettle(key, queued, nextSettleAttempt);
     }
   }
+  function sidebarHasScene(sceneId) {
+    // A tab's figure can arrive while the sidebar still shows the previous
+    // scene. Painting that figure lets a click land on the old widgets and
+    // never commit. Hold the frame until the control stamp names this scene.
+    // A missing stamp is the first paint and must not block.
+    const doc = typeof document !== "undefined" ? document : null;
+    if (!doc || typeof doc.getElementById !== "function") return true;
+    const node = doc.getElementById("scene-controls-scene");
+    const text = node && typeof node.textContent === "string" ? node.textContent : "";
+    if (!text) return true;
+    try {
+      const parsed = JSON.parse(text);
+      if (!parsed || !parsed.scene_id) return true;
+      return String(parsed.scene_id) === String(sceneId);
+    } catch (error) {
+      return true;
+    }
+  }
   function flushQueuedSceneFigure(targetSceneId, attempt) {
     const sceneId = targetSceneId ? String(targetSceneId) : currentSceneId();
     if (!sceneId) return;
     const queued = pendingFigureByScene[String(sceneId)];
     if (!queued) return;
+    if (!sidebarHasScene(sceneId)) {
+      scheduleQueuedSceneFigureRetry(sceneId, attempt);
+      return;
+    }
     if (!figurePushIsCurrent(queued)) {
       // Once the requested tab is actually selected, let the typed submitter
       // make the final complete-frame decision. The fast handoff fence can

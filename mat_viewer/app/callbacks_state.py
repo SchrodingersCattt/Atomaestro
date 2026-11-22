@@ -28,94 +28,18 @@ from .scene_controls import (
     _stamp_label_matches,
     _stamp_scene_matches,
     _stamp_scene_or_camera_differs,
+    _drop_acknowledged_pending,
+    _restore_pending_if_absent,
+    checklist_after_reconcile,
     claim_browser_scene,
     claim_poll_publish,
     filled_scene_id,
+    interaction_fence_children,
     note_interaction_epoch,
     remember_filled_scene,
     poll_request_is_stale,
     split_poll_fence,
 )
-
-
-def _drop_acknowledged_pending(backend, state) -> None:
-    """Drop a queued snapshot the tab callback is already delivering.
-
-    Duplicate arms ``pending_state`` and then selects the new tab. This
-    callback writes that scene's controls, including the rename box. Leaving
-    the snapshot queued makes the next poll write the same label again and
-    replace text the user has started typing. A snapshot that moved past the
-    state being delivered (a rename that landed mid-switch) stays queued.
-    """
-    with backend._lock:
-        pending = backend.pending_state
-        if not isinstance(pending, dict):
-            return
-        if str(pending.get("scene_id") or "") != str(state.get("scene_id") or ""):
-            return
-        if any(
-            int(pending.get(key, 0) or 0) > int(state.get(key, 0) or 0)
-            for key in _STATE_VERSION_KEYS
-        ):
-            return
-        backend.pending_state = None
-
-
-def _restore_pending_if_absent(backend, state) -> None:
-    """Put a snapshot back when a stale poll had already taken it.
-
-    A tab switch or a newer edit can land after the poll passed its first
-    check and popped the queue. A snapshot that arrived in that window
-    stays; only an empty queue is filled.
-    """
-    if not isinstance(state, dict):
-        return
-    with backend._lock:
-        if backend.pending_state is None:
-            backend.pending_state = state
-
-
-# One sidebar control can arrive after the tab value changed and before the
-# filled-scene record moves. Persist that control on the selected scene.
-# Copying the rest of the sidebar would publish the previous scene's look,
-# and advancing the filled record would let the next click do the same.
-_LAGGING_CONTROL_FIELDS = {
-    "display-mode-selector": "display_mode",
-    "display-options": "display_options",
-    "atom-scale-slider": "atom_scale",
-    "bond-radius-slider": "bond_radius",
-    "minor-opacity-slider": "minor_opacity",
-    "material-selector": "material",
-    "style-selector": "style",
-    "disorder-selector": "disorder",
-    "ortep-mode-selector": "ortep_mode",
-    "axis-scale-slider": "axis_scale",
-}
-
-
-def checklist_after_reconcile(mode, reconciled, incoming):
-    """Checklist value after display options are reconciled.
-
-    Returns ``no_update`` when the control already shows that value, so
-    restoring a stored Cell boundary does not echo another ``capture_state``.
-    """
-    visible = visible_display_options(mode, reconciled)
-    if list(visible) == list(incoming or []):
-        return no_update
-    return visible
-
-
-def interaction_fence_children():
-    """Hidden stores for one browser's poll fence.
-
-    The epoch and client id travel with sidebar captures. The sink is the
-    acknowledgement output; it is not shown.
-    """
-    return (
-        dcc.Store(id="ui-interaction-epoch", data=0),
-        dcc.Store(id="ui-client-id", data=None),
-        html.Div(id="ui-interaction-sink", style={"display": "none"}),
-    )
 
 
 def register_state_callbacks(app, backend):
@@ -881,60 +805,12 @@ def register_state_callbacks(app, backend):
         if scene_id and scene_id not in backend.scene_store.scenes:
             return no_update, no_update, no_update
         filled = filled_scene_id(filled_controls_scene, client_id)
-        preserve_live_property = False
-        live_property = None
+        # The sidebar still belongs to another scene. One control's value in
+        # that case is the previous scene's widget, so it must not be stored
+        # on the selected scene. The tab callback records the filled scene
+        # before its refit; a click after that record is a normal capture.
         if filled and scene_id and str(scene_id) != str(filled):
-            field = _LAGGING_CONTROL_FIELDS.get(triggered or "")
-            if not field:
-                return no_update, no_update, no_update
-            live = backend.get_state(scene_id)
-            incoming_controls = {
-                "display_mode": display_mode,
-                "display_options": display_options,
-                "atom_scale": atom_scale,
-                "bond_radius": bond_radius,
-                "minor_opacity": minor_opacity,
-                "material": material,
-                "style": render_style,
-                "disorder": disorder,
-                "ortep_mode": ortep_mode,
-                "axis_scale": axis_scale,
-            }
-            display_mode = live.get("display_mode")
-            display_options = list(live.get("display_options") or [])
-            atom_scale = live.get("atom_scale")
-            bond_radius = live.get("bond_radius")
-            minor_opacity = live.get("minor_opacity")
-            material = live.get("material")
-            render_style = live.get("style")
-            disorder = live.get("disorder")
-            ortep_mode = live.get("ortep_mode")
-            axis_scale = live.get("axis_scale")
-            site_index = live.get("topology_site_index")
-            topology_toggle = ["enabled"] if live.get("topology_enabled") else []
-            property_fields = None
-            preserve_live_property = True
-            live_property = live.get("atom_property_color")
-            if field == "display_mode":
-                display_mode = incoming_controls["display_mode"]
-            elif field == "display_options":
-                display_options = list(incoming_controls["display_options"] or [])
-            elif field == "atom_scale":
-                atom_scale = incoming_controls["atom_scale"]
-            elif field == "bond_radius":
-                bond_radius = incoming_controls["bond_radius"]
-            elif field == "minor_opacity":
-                minor_opacity = incoming_controls["minor_opacity"]
-            elif field == "material":
-                material = incoming_controls["material"]
-            elif field == "style":
-                render_style = incoming_controls["style"]
-            elif field == "disorder":
-                disorder = incoming_controls["disorder"]
-            elif field == "ortep_mode":
-                ortep_mode = incoming_controls["ortep_mode"]
-            elif field == "axis_scale":
-                axis_scale = incoming_controls["axis_scale"]
+            return no_update, no_update, no_update
         if scene_id:
             backend.set_active_scene(scene_id, broadcast=False)
         prev = backend.get_state(scene_id)
@@ -1001,7 +877,7 @@ def register_state_callbacks(app, backend):
             if display_changed or site_index in ("", None)
             else int(site_index),
             "topology_enabled": "enabled" in (topology_toggle or []),
-            "atom_property_color": live_property if preserve_live_property else property_spec,
+            "atom_property_color": property_spec,
         }
         # Skip the write -- and the cascade through ``update_view`` --
         # if every captured field already matches the persisted state.

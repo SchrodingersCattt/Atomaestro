@@ -637,13 +637,16 @@ through 3.x raises `TypeError` while the layout is built and the page
 falls back to the error screen.
 
 A sidebar edit that arrives after `scene-tabs` has selected another scene,
-but before that scene's controls are recorded as filled, is stored on the
-selected scene as that one control. The rest of the sidebar stays the
-selected scene's saved values, and the filled-scene record is not advanced.
-A scene-tab control sync that lands after a later edit is dropped; the tab's
-own sync still applies while its epoch is current. The selection dock
-reserves its gutter and finishes the canvas refit before a pick becomes the
-observable selection, so the next pick uses the settled viewport.
+but before that scene's controls are recorded as filled, is not stored.
+The tab callback records the filled scene before it refits the camera, so a
+click after that record is an ordinary capture. A scene-tab control sync
+that lands after a later edit is dropped; the tab's own sync still applies
+while its epoch is current. A complete frame for the newly selected scene
+stays parked until that control stamp names the scene, so the canvas the
+page treats as current already has that scene's sidebar. The selection dock
+reserves its gutter and
+finishes the canvas refit before a pick becomes the observable selection,
+so the next pick uses the settled viewport.
 
 ## Stable UI element IDs
 

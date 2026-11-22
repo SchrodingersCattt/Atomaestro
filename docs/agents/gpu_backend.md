@@ -4,10 +4,15 @@ Atomaestro exposes the optional native backend through the same immutable
 `RenderPlan` used by the CPU and Plotly adapters. It is selected explicitly:
 
 ```bash
-python -m pip install "atomaestro[gpu]"
+# Published extras today. This source checkout uses
+# python -m pip install -e ".[gpu]" and -e ".[gpu,animation]".
+# Future, only after atomaestro is on PyPI:
+# python -m pip install "atomaestro[gpu]"
+# python -m pip install "atomaestro[gpu,animation]"
+python -m pip install "matter-vis[gpu]==0.0.6"
 mat-vis capabilities --require gpu --json
 mat-vis render structure.cif -o figure.png --backend gpu --json
-python -m pip install "atomaestro[gpu,animation]"
+python -m pip install "matter-vis[gpu,animation]==0.0.6"
 mat-vis render trajectory.extxyz -o movie.gif --backend gpu --json
 ```
 

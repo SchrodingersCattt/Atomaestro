@@ -81,7 +81,10 @@ is not a vector backend.
 ## Dependency direction
 
 The base path may import only base dependencies. Optional modules are loaded
-at the operation that needs them:
+at the operation that needs them. The extra names below are this checkout's
+`atomaestro` distribution, which is not on PyPI yet. The published 0.0.6
+extras use the same names on `matter-vis`. `pip install atomaestro[...]` is
+the command only after that project is published:
 
 - Plotly HTML: `atomaestro[plotly]`;
 - Plotly static export: `atomaestro[plotly-export]`;

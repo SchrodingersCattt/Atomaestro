@@ -142,7 +142,7 @@ jobs:
     name: Publish to PyPI
     runs-on: ubuntu-24.04
     needs: [release-checks, build-package]
-    # Pending publisher on the PyPI account, not on the existing project.
+    # Configured pending publisher on the PyPI account, not on matter-vis.
     # Exact form values: project atomaestro, owner SchrodingersCattt,
     # repository Atomaestro, workflow filename release.yml, environment pypi.
     # The tag must be the vX.Y.Z value release-checks already accepted.

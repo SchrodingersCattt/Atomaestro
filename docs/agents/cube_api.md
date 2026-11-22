@@ -445,10 +445,12 @@ Depth peeling (`depth_peels`), Taubin smoothing (`taubin_iterations`,
 `taubin_pass_band`), and the native VTK window class are options on this
 helper. The isosurface shade is a shared record, described below.
 
-Install the Python extra with:
+Install the Python extra with the published release. This source checkout
+uses `python -m pip install -e ".[vtk]"`. `atomaestro[vtk]` is the command
+only after that project is on PyPI:
 
 ```console
-python -m pip install "atomaestro[vtk]"
+python -m pip install "matter-vis[vtk]==0.0.6"
 ```
 
 PyVista is imported only when the function is called. Windows selects

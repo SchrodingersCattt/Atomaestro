@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 import importlib.util
+import os
+import shutil
+import subprocess
+import sys
+import zipfile
 from pathlib import Path
+
+import pytest
 
 from mat_viewer.capabilities import MOLCRYSKIT_DEVELOPMENT_REQUIREMENT
 
@@ -82,3 +89,76 @@ def test_release_jobs_reject_direct_references_and_non_final_tags() -> None:
     assert release.index("reject_direct_dependencies.py") < release.index(
         "gh release create"
     )
+
+
+def _write_wheel(path: Path, metadata: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("atomaestro-9.9.9.dist-info/METADATA", metadata)
+
+
+def _isolated_project_artifacts(tmp_path: Path) -> list[Path]:
+    """Build a wheel and sdist from a copy so the source tree stays put."""
+    destination = tmp_path / "source"
+    shutil.copytree(
+        ROOT,
+        destination,
+        ignore=shutil.ignore_patterns(
+            ".git",
+            "dist",
+            "build",
+            ".pytest_cache",
+            ".ruff_cache",
+            "__pycache__",
+            "*.egg-info",
+        ),
+    )
+    output = tmp_path / "dist"
+    env = os.environ.copy()
+    env["SETUPTOOLS_SCM_PRETEND_VERSION"] = "9.9.9"
+    subprocess.run(
+        [sys.executable, "-m", "build", "--no-isolation", "--outdir", str(output)],
+        cwd=destination,
+        env=env,
+        check=True,
+    )
+    artifacts = sorted(output.glob("*.whl")) + sorted(output.glob("*.tar.gz"))
+    assert len(artifacts) == 2
+    return artifacts
+
+
+@pytest.mark.timeout(180)
+def test_upload_guard_rejects_built_wheel_and_accepts_legal_metadata(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The current wheel is rejected. A normal Requires-Dist wheel is not.
+
+    This expectation stays green while the release is blocked. It fails when
+    the built metadata no longer contains the direct MolCrysKit URL, which is
+    the signal to update the release block rather than a publish step.
+    """
+    checker = _checker()
+    artifacts = _isolated_project_artifacts(tmp_path)
+    wheel = next(path for path in artifacts if path.suffix == ".whl")
+    label, metadata = checker.artifact_texts(wheel)[0]
+    assert label == "METADATA"
+    assert MOLCRYSKIT_DEVELOPMENT_REQUIREMENT in checker.requires_dist_values(metadata)
+
+    blocked = checker.main(["--tag", "v9.9.9", *[str(path) for path in artifacts]])
+    captured = capsys.readouterr()
+    assert blocked == 1
+    assert MOLCRYSKIT_DEVELOPMENT_REQUIREMENT in captured.err
+    assert "direct reference" in captured.err
+    assert "lists no Requires-Dist" in captured.err
+
+    legal = tmp_path / "legal.whl"
+    _write_wheel(
+        legal,
+        "Metadata-Version: 2.1\n"
+        "Name: atomaestro\n"
+        "Version: 9.9.9\n"
+        "Requires-Dist: molcrys-kit>=0.8.0,<0.9.0\n"
+        "Requires-Dist: numpy\n",
+    )
+    assert checker.main(["--tag", "v9.9.9", str(legal)]) == 0
+    assert "direct reference" not in capsys.readouterr().err

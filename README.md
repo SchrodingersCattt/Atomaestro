@@ -141,8 +141,11 @@ mat-vis render structure.cif -o figure.png --backend cpu --json
 mat-vis render structure.cif -o plastic.png --backend cpu \
   --surface-material hard_plastic --renderer general
 
-# Optional native offscreen GPU PNG (explicit; no CPU fallback)
-python -m pip install "atomaestro[gpu]"
+# Optional native offscreen GPU PNG (explicit; no CPU fallback).
+# Published extra today:
+python -m pip install "matter-vis[gpu]==0.0.6"
+# This source checkout: python -m pip install -e ".[gpu]"
+# Future, only after atomaestro is on PyPI: python -m pip install "atomaestro[gpu]"
 mat-vis capabilities --require gpu --json
 mat-vis render structure.cif -o figure-gpu.png --backend gpu --json
 
@@ -159,8 +162,11 @@ mat-vis render structure.cif -o figure.pdf \
 mat-vis render structure.cif -o si_figure.html --backend plotly \
   --show-hydrogen --show-labels
 
-# Launch the interactive browser viewer (Dash 2.18.2 or newer)
-python -m pip install "atomaestro[web]"
+# Launch the interactive browser viewer (Dash 2.18.2 or newer).
+# Published extra today:
+python -m pip install "matter-vis[web]==0.0.6"
+# This source checkout: python -m pip install -e ".[web]"
+# Future, only after atomaestro is on PyPI: python -m pip install "atomaestro[web]"
 mat-vis serve --cif structure.cif
 ```
 

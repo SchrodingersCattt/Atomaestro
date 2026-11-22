@@ -23,7 +23,7 @@ PyPI does not rename `matter-vis` to `atomaestro`.
 - [Choosing a project name](https://docs.pypi.org/project-management/choosing-a-name/) treats a different name as a new project. [Troubleshooting](https://docs.pypi.org/project-management/troubleshooting/) says deleting a project is permanent and releases the name. Do not delete `matter-vis`.
 - A [pending trusted publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/) creates the new project on first publish. It does not reserve the name before that upload. If another user registers `atomaestro` first, the pending publisher is invalidated.
 
-On 2026-11-22 the public JSON URLs `https://pypi.org/pypi/atomaestro/json` and `https://pypi.org/pypi/atomestro/json` both returned 404. That means no release is published under those names. It is not a reservation. The account owner should add the pending publisher before the first tag.
+On 2026-11-22 the public JSON URLs `https://pypi.org/pypi/atomaestro/json` and `https://pypi.org/pypi/atomestro/json` both returned 404. No release is published under those names. A pending publisher was configured the same day at 13:09 for project `atomaestro`, owner `SchrodingersCattt`, repository `Atomaestro`, workflow filename `release.yml`, and environment `pypi`. That registration matches the workflow. It does not reserve the name until the first successful publish.
 
 ## Install
 
@@ -81,7 +81,7 @@ The shim itself is not in this change and is not published.
 
 The publish job is `.github/workflows/release.yml`. It runs only for tags `v*` on `SchrodingersCattt/Atomaestro`, and `release-checks` rejects any tag that is not `vX.Y.Z`. The job uses the GitHub environment named `pypi` and `id-token: write` on that job only. `pypa/gh-action-pypi-publish@release/v1` is called with `attestations: true` (PEP 740). No PyPI token or password is stored in the workflow.
 
-Register a **pending** publisher while creating the project ([creating a project through OIDC](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)). The form fields, which must match the workflow exactly ([adding a publisher](https://docs.pypi.org/trusted-publishers/adding-a-publisher/)):
+The pending publisher is configured ([creating a project through OIDC](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)). The form fields match the workflow ([adding a publisher](https://docs.pypi.org/trusted-publishers/adding-a-publisher/)):
 
 | PyPI field | Value |
 |---|---|
@@ -91,7 +91,7 @@ Register a **pending** publisher while creating the project ([creating a project
 | Workflow filename | `release.yml` |
 | Environment name | `pypi` |
 
-The workflow file on disk is `.github/workflows/release.yml`. PyPI asks for the filename `release.yml`, not the directory. The GitHub environment `pypi` already exists on this repository and currently has no protection rules. Add a required reviewer, and limit the environment to the protected release tags, before the first publish. This repository change does not publish, tag, or bump a version.
+The workflow file on disk is `.github/workflows/release.yml`. PyPI asks for the filename `release.yml`, not the directory. The GitHub environment `pypi` already exists. This change does not add a required reviewer and does not limit the environment to release tags. Those settings stay a separate decision. This repository change does not publish, tag, or bump a version.
 
 [Publishing with a trusted publisher](https://docs.pypi.org/trusted-publishers/using-a-publisher/) requires `id-token: write`. [Attestations](https://docs.pypi.org/attestations/) are the PEP 740 publish attestation produced by the same OIDC identity. The action enables them by default; the workflow sets the input explicitly.
 
@@ -118,17 +118,17 @@ Checked on 2026-11-22, the newest PyPI release is `molcrys-kit` 0.8.0 (also tagg
 
 There is no released version, and therefore no normal `molcrys-kit>=X,<Y` range, that can replace the pin. Do not fall back to 0.8.0.
 
-`.github/scripts/reject_direct_dependencies.py` fails the release workflow when a built wheel or sdist contains a direct reference, when the canonical metadata lists no `Requires-Dist` at all, and when the tag is not `vX.Y.Z`. The wheel built from this tree carries the git URL above. Its sdist `PKG-INFO` currently omits every requirement, while `requires.txt` still records the same URL; both results fail the check. The build job runs it before uploading artifacts. The PyPI job and the GitHub Release job run it again before publishing. A tag push of this tree fails that check. That is the release block.
+`.github/scripts/reject_direct_dependencies.py` fails the release workflow when a built wheel or sdist contains a direct reference, when the canonical metadata lists no `Requires-Dist` at all, and when the tag is not `vX.Y.Z`. The wheel built from this tree carries the git URL above. Its sdist `PKG-INFO` currently omits every requirement, while `requires.txt` still records the same URL; both results fail the check. The release build job runs it before uploading artifacts. The PyPI job and the GitHub Release job run it again before publishing. A tag push of this tree fails that check. That is the release block. Pull-request CI feeds the wheel and sdist it just built to the same script and expects rejection, so the blocked release does not fail the pull request. The test also builds those artifacts and accepts a wheel whose `Requires-Dist` is a normal version requirement.
 
 Replacing the pin requires a MolCrysKit release that the user confirms by version. This pull request does not create that release. The confirmed release has to include the contract above and install on Windows as a normal PyPI requirement, because Atomaestro's Windows job and a public install cannot keep a git URL. Until that release exists, do not publish `atomaestro`.
 
 ## Version
 
-The published Atomaestro predecessor is `matter-vis` 0.0.6. No next version is chosen here. Do not tag from this change.
+The published Atomaestro predecessor is `matter-vis` 0.0.6. No next version is approved. `0.1.0` has been recommended and is not the chosen tag. Do not tag from this change.
 
 ## Still open
 
-- Account owner creates the pending publisher and the GitHub environment reviewer gate.
+- The pending publisher is configured. The GitHub environment `pypi` reviewer and tag limits are unchanged.
 - A user-confirmed MolCrysKit release replaces the direct URL, and the metadata check then passes.
 - A chosen tag publishes `atomaestro` and is verified by install.
 - Separate empty `matter-vis` shim, only after that publish.

@@ -260,6 +260,80 @@ def test_capture_does_not_acknowledge_an_undelivered_camera_command(
     assert response[-2] is no_update
 
 
+def test_camera_revision_leaves_an_inflight_unit_cell_uncheck(
+    scene_sync, monkeypatch
+):
+    """A newer camera revision does not put the server checklist back.
+
+    The merged Camera WebGL log shows the unit-cell checkbox wait and the
+    Dash request times. It has no callback body and no gesture stamp, so
+    it does not show this poll writing the previous checklist. Here the
+    server still has ``unit_cell_box``, the browser has already dropped
+    it, and the next poll acknowledges a newer ``camera_revision``. The
+    checklist output stays put.
+    """
+    from mat_viewer.app.camera_helpers import _persist_relayout_camera
+
+    backend, scene_id, callbacks, browser = scene_sync
+    backend.patch_state(
+        {
+            "display_mode": "unit_cell",
+            "display_options": ["hydrogens", "unit_cell_box"],
+        },
+        scene_id=scene_id,
+        broadcast=False,
+    )
+    sync = callbacks["sync_agent_state"]
+    response = _poll(sync, scene_id, browser, monkeypatch)
+    browser = _apply(browser, response)
+    stamp, label, controls = browser
+    assert "unit_cell_box" in list(controls[1])
+    controls = list(controls)
+    controls[1] = [item for item in controls[1] if item != "unit_cell_box"]
+    browser = stamp, label, controls
+    state = backend.get_state(scene_id)
+    before = int(state.get("camera_revision") or 0)
+    stored = _persist_relayout_camera(
+        backend,
+        {
+            "scene_id": scene_id,
+            "scene_generation": state.get("scene_generation"),
+            "camera_revision": before,
+            "relayout": {
+                "scene.camera": {
+                    "eye": {"x": 0.0, "y": 0.0, "z": 50.0},
+                    "center": {"x": 20.0, "y": 20.0, "z": 20.0},
+                    "up": {"x": 0.0, "y": 0.0, "z": 1.0},
+                    "projection": {"type": "orthographic"},
+                }
+            },
+        },
+        None,
+        now=0.0,
+        last_commit=0.0,
+        min_interval_s=0.0,
+    )
+    assert stored is not None
+    after = int(backend.get_state(scene_id).get("camera_revision") or 0)
+    if after == before:
+        backend.apply_intent(
+            {
+                "type": "set_camera",
+                "scene_id": scene_id,
+                "payload": {"camera_revision": before + 1},
+                "expected_scene_generation": state.get("scene_generation"),
+                "expected_camera_revision": before,
+            }
+        )
+        after = int(backend.get_state(scene_id).get("camera_revision") or 0)
+    assert after > before
+    response = _poll(sync, scene_id, browser, monkeypatch)
+    assert response[-4] is not no_update
+    assert f'"camera_revision": {after}' in response[-4]
+    assert response[2] is no_update
+    assert "unit_cell_box" in backend.get_state(scene_id)["display_options"]
+
+
 def test_capture_does_not_acknowledge_a_server_edit_after_its_commit(
     scene_sync, monkeypatch
 ):

@@ -3927,6 +3927,14 @@
   document.addEventListener("pointercancel", function() {
     window.__mvGestureEndedAt = Date.now();
     if (interactionActive) markInactiveSoon();
+    const generation = gestureGeneration;
+    const stamped = window.__mvGestureSceneId || "";
+    setTimeout(function() {
+      // pointerup releases the name after 1000ms. Cancel has to do the
+      // same, or the name stays and a later projection relayout is stored
+      // as that gesture.
+      releaseGestureScene(generation, stamped);
+    }, 1000);
   });
   document.addEventListener("wheel", function(e) {
     if (!inGraph(e.target)) return;

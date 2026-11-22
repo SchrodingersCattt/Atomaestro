@@ -32,15 +32,16 @@ MOLCRYSKIT_SOURCE_MINIMUM = MOLCRYSKIT_MINIMUM
 # role/regime API is published.
 MOLCRYSKIT_INSTALL = f'python -m pip install "{MOLCRYSKIT_REQUIREMENT}"'
 # Development pin shared by the phone snapshot and Mercury import.
-# a54a922 is the reviewed head of open MolCrysKit PR 234, not MolCrysKit
-# main. It includes lightweight CIF / phone-site a4080132 and Mercury
-# read_mryx 0702ed8d. Do not retarget this URL to a later branch tip.
+# 2a3ee11 is the authorized pin, not MolCrysKit main and not tip
+# 7b859dd. It includes lightweight CIF / phone-site a4080132, Mercury
+# read_mryx 0702ed8d, and the label bound that discards unselected
+# structures. Do not retarget this URL to 7b859dd.
 # The desktop extra supplies ASE, pymatgen, SciPy, spglib, and defusedxml;
 # read_mryx imports defusedxml from that extra. pyproject.toml must name
 # this same requirement. The constraint file repeats the commit URL without
 # the extra marker because pip 26 rejects extras in constraints.
 # Restore a release range once those APIs are on PyPI.
-MOLCRYSKIT_SOURCE_COMMIT = "a54a922eb2d11dca3fafac2d63a19c603541ca4d"
+MOLCRYSKIT_SOURCE_COMMIT = "2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6"
 MOLCRYSKIT_DEVELOPMENT_REQUIREMENT = (
     "molcrys-kit[desktop] @ git+https://github.com/SchrodingersCattt/MolCrysKit.git@"
     f"{MOLCRYSKIT_SOURCE_COMMIT}"

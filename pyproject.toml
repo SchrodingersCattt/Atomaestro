@@ -31,10 +31,11 @@ dependencies = [
     # PyPI 0.8.0 does not include BondRecord.role,
     # MolecularCrystal.get_connectivity_report(), or find_polyhedra
     # disorder_policy (major / exclusive / as_refined). The pin below is
-    # MolCrysKit a54a922eb2d11dca3fafac2d63a19c603541ca4d, the reviewed head
-    # of open PR 234. It includes lightweight CIF / phone-site a4080132 and
-    # Mercury read_mryx 0702ed8d. It is not MolCrysKit main. Do not retarget
-    # this URL to a later branch tip. Restore a version range once those
+    # MolCrysKit 2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6, the authorized
+    # pin. It includes lightweight CIF / phone-site a4080132, Mercury
+    # read_mryx 0702ed8d, and the label bound that discards unselected
+    # structures. It is not MolCrysKit main. Do not retarget this URL to
+    # tip 7b859dd. Restore a version range once those
     # APIs are published.
     # The desktop extra supplies ASE, pymatgen, SciPy, spglib, and
     # defusedxml. Core MolCrysKit is NumPy, NetworkX, and Click. read_mryx
@@ -46,7 +47,7 @@ dependencies = [
     # one makes pip fail. Do not invent a PyPI version.
     # identify_molecules defaults to as_refined; only shell construction
     # defaults to major. Exclusive shell selection keeps whole orientations.
-    "molcrys-kit[desktop] @ git+https://github.com/SchrodingersCattt/MolCrysKit.git@a54a922eb2d11dca3fafac2d63a19c603541ca4d",
+    "molcrys-kit[desktop] @ git+https://github.com/SchrodingersCattt/MolCrysKit.git@2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6",
 ]
 
 [project.scripts]

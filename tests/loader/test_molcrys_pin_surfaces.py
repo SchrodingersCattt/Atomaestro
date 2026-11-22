@@ -1,8 +1,9 @@
 """The shared MolCrysKit pin keeps both parent surfaces.
 
-``a54a922eb2d11dca3fafac2d63a19c603541ca4d`` is the reviewed head of open
-MolCrysKit PR 234. It includes lightweight CIF commit ``a4080132`` and
-Mercury ``read_mryx`` commit ``0702ed8d``. It is not MolCrysKit main.
+``2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6`` is the authorized pin. It
+includes lightweight CIF commit ``a4080132``, Mercury ``read_mryx`` commit
+``0702ed8d``, and the label bound that discards unselected structures. It
+is not MolCrysKit main and not tip ``7b859dd``.
 ``read_mryx`` imports ``defusedxml`` from the desktop extra, so a core-only
 install of this commit fails here.
 """

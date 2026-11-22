@@ -397,6 +397,10 @@ Notes for callers:
   The first figure's camera revision is 0. A later figure whose camera
   revision is older than the Fit that is already on the canvas is not
   applied, so that first cell box cannot replace the fitted ranges.
+  That comparison is the scene already painted. A complete frame for the
+  selected scene still replaces a different structure when its camera
+  revision is behind the pose stored for the selected scene. The stored
+  pose is applied after the traces change.
   A later figure delivery rewrites the axis
   ranges from that same data box, including a cache hit, a display-option
   rebuild, and a return to the scene.   The same delivery keeps the fitted

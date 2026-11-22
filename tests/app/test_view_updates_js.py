@@ -718,3 +718,77 @@ const figure = {
         check=False,
     )
     assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_same_revision_drag_keeps_the_stored_pose_over_a_replayed_command():
+    """A drag does not publish a camera row or advance camera_revision.
+
+    The journal row that is still newest is the command from before the
+    drag. Replaying it after the geometry frame must not call applyAsync:
+    that relayout is captured and writes the command eye over the orbit.
+    A later revision still applies.
+    """
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is needed to execute the frontend regression")
+    source = Path(__file__).resolve().parents[2] / "frontend" / "assets" / "view_updates.js"
+    program = r"""
+const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const applied = [];
+const orbit = {eye: {x: 0.34, y: 1.73, z: 0.34}, center: {x: 0, y: 0, z: 0}, up: {x: -0.27, y: -0.14, z: 0.95}, projection: {type: 'perspective'}};
+const reset = {eye: {x: 1.04, y: 1.04, z: 1.04}, center: {x: 0, y: 0, z: 0}, up: {x: -0.41, y: -0.41, z: 0.82}, projection: {type: 'perspective'}};
+const gd = {layout: {meta: {mattervis_render: {
+  scene_id: 'ionic', scene_generation: 5, geometry_version: 1, display_version: 1,
+  camera_version: 1, camera_revision: 1, render_revision: 1,
+}}}, data: [{type: 'scatter3d', x: [1]}]};
+const sandbox = {
+  console, Promise, Number, String, Object, Array, Math,
+  window: {
+    __mvServerCameraByScene: {ionic: {camera: orbit, camera_revision: 1, scene_generation: 5}},
+    MatterVisSelectedScene: () => 'ionic',
+    MatterVisViewCamera: {
+      graph: () => gd,
+      applyAsync: (camera) => { applied.push(camera); return Promise.resolve(); },
+    },
+  },
+};
+vm.createContext(sandbox);
+vm.runInContext(source, sandbox);
+const submit = sandbox.window.MatterVisViewUpdates.submit;
+const envelope = (camera, revision) => ({
+  type: 'view_update', update_kind: 'camera', scene_id: 'ionic', scene_generation: 5,
+  geometry_version: 1, display_version: 1, camera_version: revision, camera_revision: revision,
+  payload: {camera: camera, command: revision === 1 ? 'reset' : 'orbit'},
+});
+(async () => {
+  assert.equal(await submit(envelope(reset, 1)), 'camera');
+  assert.deepEqual(applied, [], 'the replayed reset replaced the stored orbit');
+  assert.equal(await submit(envelope(orbit, 2)), 'camera');
+  assert.equal(applied.length, 1, 'a later camera revision was not applied');
+  assert.equal(applied[0].eye.x, 0.34);
+  sandbox.window.__mvServerCameraByScene.ionic.server_started_at = 'epoch-old';
+  const restarted = envelope(reset, 1);
+  restarted.server_started_at = 'epoch-new';
+  applied.length = 0;
+  sandbox.window.MatterVisViewUpdates.reset();
+  assert.equal(await submit(restarted), 'camera');
+  assert.equal(applied.length, 1, 'a restarted server session reused the previous scene book');
+  assert.equal(applied[0].eye.x, 1.04);
+  sandbox.window.__mvServerCameraByScene = {ionic: {camera: orbit, camera_revision: 1, scene_generation: 5}};
+  const refilled = envelope(reset, 1);
+  refilled.server_started_at = 'epoch-newer';
+  applied.length = 0;
+  sandbox.window.MatterVisViewUpdates.reset();
+  assert.equal(await submit(refilled), 'camera');
+  assert.equal(applied.length, 1, 'a book with no server epoch survived the restart');
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+"""
+    result = subprocess.run(
+        [node, "-e", program, str(source)],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout

@@ -54,8 +54,9 @@ class _Worker:
     def __init__(self):
         self.states = []
 
-    def request_figure_build(self, state):
+    def request_figure_build(self, state, *, force=False):
         self.states.append(state)
+        self.force = force
         return True
 
 

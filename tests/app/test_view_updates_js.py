@@ -654,3 +654,67 @@ function figure(scene, generation, camera, name) {
 """
     result = subprocess.run([node, "-e", program, str(source)], capture_output=True, text=True, timeout=15, check=False)
     assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_scene_switch_paints_a_geometry_body_behind_the_confirmed_camera():
+    """Returning to a scene must paint its body before the later camera pose.
+
+    The confirmed camera revision can be newer than the journal figure. That
+    figure is stale on the same canvas and current when the canvas still
+    shows the other scene.
+    """
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is needed to execute the frontend regression")
+    source = Path(__file__).resolve().parents[2] / "frontend" / "assets" / "view_updates.js"
+    program = r"""
+const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const calls = [];
+const gd = {layout: {meta: {mattervis_render: {
+  scene_id: 'water', scene_generation: 1, geometry_version: 1, display_version: 1,
+  camera_version: 1, camera_revision: 1, render_revision: 1,
+}}}, data: [{type: 'scatter3d', x: [0]}]};
+let selected = 'ionic';
+const sandbox = {
+  console, Promise, Number, String, Object, Array,
+  window: {
+    MatterVisSelectedScene: () => selected,
+    MatterVisExpectedRender: () => ({scene_generation: 1, render_revision: 1, camera_revision: 4}),
+    MatterVisViewCamera: {graph: () => gd},
+    Plotly: {react: (graph, data, layout) => {
+      graph.data = data; graph.layout = layout; calls.push(layout.meta.mattervis_render.scene_id);
+      return Promise.resolve();
+    }},
+  },
+};
+vm.createContext(sandbox);
+vm.runInContext(source, sandbox);
+const submit = sandbox.window.MatterVisViewUpdates.submit;
+const figure = {
+  type: 'figure', scene_id: 'ionic', scene_generation: 1, update_kind: 'geometry',
+  geometry_version: 1, display_version: 1, camera_version: 0, camera_revision: 0, render_revision: 1,
+  figure: {data: [{type: 'scatter3d', x: [1]}], layout: {meta: {mattervis_render: {
+    scene_id: 'ionic', scene_generation: 1, camera_revision: 0, render_revision: 1,
+  }}}},
+};
+(async () => {
+  assert.equal(await submit(figure), 'figure');
+  assert.deepEqual(calls, ['ionic']);
+  sandbox.window.MatterVisViewUpdates.reset();
+  gd.layout.meta.mattervis_render.scene_id = 'ionic';
+  gd.data = figure.figure.data;
+  calls.length = 0;
+  selected = 'ionic';
+  assert.equal(await submit(figure), 'stale');
+  assert.deepEqual(calls, []);
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+"""
+    result = subprocess.run(
+        [node, "-e", program, str(source)],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout

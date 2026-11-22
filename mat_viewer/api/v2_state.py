@@ -4,6 +4,23 @@ from __future__ import annotations
 from .shared import *
 
 
+def _events_include_figure(events: list) -> bool:
+    """A camera envelope is not a frame the canvas can paint."""
+    return any(
+        isinstance(event, dict) and event.get("type") == "figure" and event.get("figure")
+        for event in events
+    )
+
+
+def _events_include_camera(events: list) -> bool:
+    """The current journal already confirmed a pose for this scene."""
+    return any(
+        isinstance(event, dict)
+        and str(event.get("update_kind") or event.get("kind") or "") == "camera"
+        for event in events
+    )
+
+
 def register_state_routes(v2, backend) -> dict:
     @v2.get("/state")
     def get_state():
@@ -24,15 +41,34 @@ def register_state_routes(v2, backend) -> dict:
         if scene_id:
             scene_id = str(scene_id)
             events = [event for event in events if str(event.get("scene_id") or "") == scene_id]
-            if not events:
+            if not _events_include_figure(events):
                 latest = backend.latest_figure_broadcast(scene_id)
-                if latest and int(latest.get("figure_seq", 0) or 0) > since:
-                    events = [latest]
+                if (
+                    isinstance(latest, dict)
+                    and int(latest.get("figure_seq", 0) or 0) > since
+                    and latest not in events
+                ):
+                    events = [latest, *events]
+            if not _events_include_figure(events) and _events_include_camera(events):
+                # The camera command hid the geometry body from the current
+                # frame filter. Return that body only when this response also
+                # carries the confirmed pose. A silent refit has no pose
+                # envelope, and its old figure must not be painted alone.
+                recover = getattr(backend, "reusable_scene_figure", None)
+                recovered = recover(scene_id) if callable(recover) else None
+                if (
+                    isinstance(recovered, dict)
+                    and int(recovered.get("figure_seq", 0) or 0) > since
+                ):
+                    events = [recovered, *events]
             pending = False
             terminal = False
-            if not events:
+            if not _events_include_figure(events):
                 try:
-                    pending = bool(backend.ensure_scene_figure(scene_id))
+                    try:
+                        pending = bool(backend.ensure_scene_figure(scene_id, force=True))
+                    except TypeError:
+                        pending = bool(backend.ensure_scene_figure(scene_id))
                 except KeyError:
                     # A tab can outlive its scene (for example after closing an
                     # upload).  This is a terminal state, not a render that can

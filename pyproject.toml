@@ -39,6 +39,9 @@ dependencies = [
     # imports defusedxml from the desktop extra, so this dependency requests
     # that extra. requirements/ci-constraints.txt names this same commit URL
     # without the extra marker: pip 26 rejects extras in a constraint.
+    # mat_viewer/capabilities.py and tests/test_ci_environment_contract.py
+    # must name this same commit. A constraint URL that differs from this
+    # one makes pip fail.
     # identify_molecules defaults to as_refined; shell construction defaults
     # to major. Exclusive shell selection keeps whole orientations.
     "molcrys-kit[desktop] @ git+https://github.com/SchrodingersCattt/MolCrysKit.git@2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6",
@@ -86,6 +89,9 @@ test = [
     "tomli; python_version < '3.11'",
 ]
 dev = ["matter-vis[all,test]", "build", "ruff"]
+
+[tool.setuptools]
+license-files = ["LICENSE"]
 
 [tool.setuptools.packages.find]
 include = ["mat_viewer*"]

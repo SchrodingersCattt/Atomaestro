@@ -2669,14 +2669,21 @@
     if (key==="?"||(e.shiftKey&&key==="/")) { e.preventDefault(); toggleHelp(); return; }
     if (key==="Escape") {
       toggleHelp(false);
-      // Clear the browser's per-scene target cache immediately. The Dash
-      // action callback persists the same clear, but waiting for that round
-      // trip leaves a stale outline visible for one render turn.
-      publishSemanticSelection(null, "clear");
-      if (typeof window.MatterVisInvalidateSemanticHover === "function") {
-        window.MatterVisInvalidateSemanticHover();
-      }
-      pushAction("select_clear");
+      // Drop the outline now. The server clear waits until the dock column
+      // has been given back and that width/height relayout has settled.
+      // Publishing the clear first lets the next pick sample a viewport
+      // the close is about to move.
+      clearSelectionOutline();
+      const finishClear = function () {
+        publishSemanticSelection(null, "clear");
+        if (typeof window.MatterVisInvalidateSemanticHover === "function") {
+          window.MatterVisInvalidateSemanticHover();
+        }
+        pushAction("select_clear");
+      };
+      const dock = window.MatterVisSelectionDock;
+      if (dock && typeof dock.afterGutter === "function") dock.afterGutter(false, finishClear);
+      else finishClear();
       return;
     }
     const map = {r:"supercell_2x", R:"supercell_clear", g:"grow_bonds", G:"grow_radius", h:"hide", c:"colour_picker", p:"promote_to_group", a:"select_add", m:"select_fragment", e:"select_element", f:"selection_focus_camera"};

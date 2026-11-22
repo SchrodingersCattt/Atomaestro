@@ -417,6 +417,23 @@ assert.equal(selectAll.prevented, true);
 assert.equal(stores.at(-1).data.action, 'select_all');
 const typedSelect = press('a', {tagName:'TEXTAREA'}, {ctrlKey:true});
 assert.equal(typedSelect.prevented, false);
+let released = null;
+sandbox.window.MatterVisSelectionDock = {
+  afterGutter(open, done) { released = {open, done}; },
+};
+const beforeClear = stores.length;
+press('Escape', {tagName:'DIV', isContentEditable:false});
+assert.equal(stores.length, beforeClear);
+assert.equal(released && released.open, false);
+sandbox.CustomEvent = class CustomEvent {
+  constructor(type, init) { this.type = type; this.detail = init && init.detail; }
+};
+sandbox.window.dispatchEvent = function () {};
+released.done();
+assert.equal(stores.at(-1).data.action, 'select_clear');
+const selectionWrite = stores.filter((item) => item.id === 'scene-selection-store').at(-1);
+assert.equal(selectionWrite.data.mode, 'clear');
+assert.equal(selectionWrite.data.targets.length, 0);
 """,
         ASSETS / "mattervis.js",
     )

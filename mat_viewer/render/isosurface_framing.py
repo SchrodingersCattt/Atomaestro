@@ -162,7 +162,8 @@ def isosurface_mesh_vertices(
         return stored if stored is not None else np.empty((0, 3), dtype=float)
     isovalue = style.get("isosurface_isovalue", style.get("isovalue"))
     stride = int(style.get("isosurface_stride", 2) or 2)
-    percentile = float(style.get("isosurface_percentile", 98.5))
+    raw_percentile = style.get("isosurface_percentile", 98.5)
+    percentile = 98.5 if raw_percentile is None else float(raw_percentile)
     key = (
         None if isovalue is None else float(isovalue),
         stride,
@@ -519,24 +520,41 @@ def bundle_cube(bundle: Any, scene: Mapping[str, Any] | None = None) -> Any:
 
 
 def _style_from_args(args: Any) -> dict[str, Any]:
-    opacity = getattr(args, "isosurface_opacity", None)
+    """Copy the draw-path isosurface settings, including omitted coefficients.
+
+    CLI flags default to ``None`` when the caller does not pass them.
+    ``getattr`` then returns that ``None`` instead of the historical
+    Lambert pair, so the numbers come from the same resolver the renderer
+    uses: ambient 0.68, diffuse 0.32, opacity 0.55.
+    """
+    from .isosurface_material import resolve_isosurface_material
+
     color_range = getattr(args, "isosurface_color_range", None)
     if color_range is not None:
         color_range = (float(color_range[0]), float(color_range[1]))
+    resolved = resolve_isosurface_material(
+        getattr(args, "isosurface_material", None),
+        ambient=getattr(args, "isosurface_ambient", None),
+        diffuse=getattr(args, "isosurface_diffuse", None),
+        specular=getattr(args, "isosurface_specular", None),
+        shininess=getattr(args, "isosurface_shininess", None),
+        opacity=getattr(args, "isosurface_opacity", None),
+    )
+    percentile = getattr(args, "isosurface_percentile", None)
     return {
         "isosurface_enabled": True,
         "isosurface_isovalue": getattr(args, "isovalue", None),
         "isosurface_stride": int(getattr(args, "isosurface_stride", 2) or 2),
-        "isosurface_percentile": float(getattr(args, "isosurface_percentile", 98.5)),
-        "isosurface_opacity": 0.55 if opacity is None else float(opacity),
+        "isosurface_percentile": 98.5 if percentile is None else float(percentile),
+        "isosurface_opacity": resolved.opacity,
         "isosurface_positive_color": getattr(
             args, "isosurface_positive_color", "#D55E00"
         ),
         "isosurface_negative_color": getattr(
             args, "isosurface_negative_color", "#0072B2"
         ),
-        "isosurface_ambient": float(getattr(args, "isosurface_ambient", 0.68)),
-        "isosurface_diffuse": float(getattr(args, "isosurface_diffuse", 0.32)),
+        "isosurface_ambient": resolved.ambient,
+        "isosurface_diffuse": resolved.diffuse,
         "isosurface_colormap": getattr(args, "isosurface_colormap", "bgr"),
         "isosurface_color_range": color_range,
         "isosurface_color_center": getattr(args, "isosurface_color_center", None),

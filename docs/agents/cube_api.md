@@ -77,7 +77,9 @@ The automatic camera reads the isosurface vertices stored on the scene.
 Those vertices are the visible mesh after a density mask, a cell clip, and
 any smoothing. When the density mask is enabled, the general renderer
 extracts that masked mesh before it fits, with the same density cube and
-cutoff the draw path uses. That extraction stores the masked marching-cubes
+cutoff the draw path uses. Omitted `--isosurface-ambient` and
+`--isosurface-diffuse` stay the historical 0.68 and 0.32 through that same
+resolver; an explicit `None` on the namespace is not passed to `float`. That extraction stores the masked marching-cubes
 vertices. `cell_clip_planes` is the six inward half-spaces of one primitive
 cell, including a skew or left-handed lattice. A caller that smooths or
 clips writes those vertices back onto the stored mesh before the fit reads

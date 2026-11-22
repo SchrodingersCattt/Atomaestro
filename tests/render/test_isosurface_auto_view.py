@@ -565,3 +565,40 @@ def test_removed_lobe_reframes_perspective_and_orthographic(monkeypatch) -> None
     )
     assert kept_distance / full_distance == pytest.approx(kept_radius / full_radius)
     assert kept_distance < full_distance
+
+
+def test_omitted_light_coefficients_keep_the_historical_lambert_pair():
+    """CLI defaults store None; the fit must use 0.68 and 0.32, not float(None)."""
+    from mat_viewer.render.isosurface_framing import _style_from_args
+
+    omitted = _style_from_args(
+        Namespace(
+            isosurface_ambient=None,
+            isosurface_diffuse=None,
+            isosurface_specular=None,
+            isosurface_shininess=None,
+            isosurface_opacity=None,
+            isosurface_material=None,
+            isosurface_percentile=None,
+            isosurface_stride=None,
+            isovalue=0.02,
+        )
+    )
+    assert omitted["isosurface_ambient"] == pytest.approx(0.68)
+    assert omitted["isosurface_diffuse"] == pytest.approx(0.32)
+    assert omitted["isosurface_opacity"] == pytest.approx(0.55)
+    assert omitted["isosurface_percentile"] == pytest.approx(98.5)
+    assert omitted["isosurface_stride"] == 2
+
+    explicit = _style_from_args(
+        Namespace(
+            isosurface_ambient=0.4,
+            isosurface_diffuse=0.5,
+            isosurface_opacity=0.7,
+            isosurface_percentile=90.0,
+        )
+    )
+    assert explicit["isosurface_ambient"] == pytest.approx(0.4)
+    assert explicit["isosurface_diffuse"] == pytest.approx(0.5)
+    assert explicit["isosurface_opacity"] == pytest.approx(0.7)
+    assert explicit["isosurface_percentile"] == pytest.approx(90.0)

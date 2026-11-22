@@ -17,9 +17,9 @@ python -m pip install atomaestro
 ```
 
 Do not install `matter-vis` and `atomaestro` into the same environment. Both
-full distributions own `mat_viewer` and the `mat-vis` script. See
-[the migration guide](../../../docs/rebranding.md). Add optional extras only
-when required; see [capabilities and installation](./capabilities-and-install.md).
+full distributions own `mat_viewer` and the `mat-vis` script. The migration
+notes are in the repository file `docs/rebranding.md`. Add optional extras
+only when required; see [capabilities and installation](./capabilities-and-install.md).
 
 For requested Atomaestro source changes, install a checkout instead:
 

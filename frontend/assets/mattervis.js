@@ -3751,6 +3751,59 @@
     if (generation !== gestureGeneration) return;
     if ((window.__mvGestureSceneId || "") === (stamped || "")) window.__mvGestureSceneId = "";
   }
+  function watchGestureCameraCommit() {
+    const gd = graphDiv();
+    if (!gd || gd.__mvGestureCommitWatch || typeof gd.on !== "function") return;
+    gd.__mvGestureCommitWatch = true;
+    gd.on("plotly_relayout", function (data) {
+      if (!data || typeof data !== "object") return;
+      const keys = Object.keys(data);
+      let touches = false;
+      for (let index = 0; index < keys.length; index += 1) {
+        const key = keys[index];
+        if (key === "scene.camera" || key.indexOf("scene.camera.") === 0) touches = true;
+        if (key === "scene" && data.scene && data.scene.camera) touches = true;
+      }
+      if (!touches) return;
+      // Server applies stamp a uirevision suffix. Plotly's own drag commit
+      // is the camera alone. Counting the suffix as a commit would skip
+      // the repair for a pan that never emitted one.
+      if (Object.prototype.hasOwnProperty.call(data, "scene.uirevision")) return;
+      if (Number(window.__mvProgrammaticCameraDepth || 0) > 0) return;
+      if (gd.__mvApplyingServerCamera || gd.__mvRestoringDrag ||
+          Number(gd.__mvInsideFrameReact || 0) > 0 ||
+          Number(gd.__mvOwnedRelayoutDepth || 0) > 0) return;
+      window.__mvGestureUserRelayoutAt = Date.now();
+    });
+  }
+  function paintUncommittedCamera(generation, stamped) {
+    /* Plotly commits a drag on mouseup, after pointerup. A pan that ends
+     * outside the plot never emits that relayout. A refit that arrived
+     * while the button was down was put back to the sampled eye. Once
+     * this event turn finishes, paint the camera the server already
+     * accepted. A relayout Plotly did emit stays with the server. */
+    setTimeout(function () {
+      if (generation !== gestureGeneration) return;
+      watchGestureCameraCommit();
+      const gd = graphDiv();
+      if (!gd || typeof window.__mvApplyServerCamera !== "function") return;
+      const ended = Number(window.__mvGestureEndedAt || 0);
+      const committed = Number(window.__mvGestureUserRelayoutAt || 0);
+      if (committed && ended && committed + 50 >= ended) return;
+      const render = renderMetadataFromLayout(gd.layout);
+      const mounted = render && render.scene_id ? String(render.scene_id) : "";
+      if (!mounted) return;
+      if (stamped && mounted && stamped !== mounted) return;
+      /* The wrapper does not count a relayout while a frame react is
+       * open. This paint is still a camera write after pointer-up, and
+       * the overlapping frame must not put the sampled eye back. */
+      gd.__mvExternalRelayouts = Number(gd.__mvExternalRelayouts || 0) + 1;
+      window.__mvUncommittedPaintCount = Number(window.__mvUncommittedPaintCount || 0) + 1;
+      window.__mvApplyServerCamera(mounted);
+    }, 0);
+  }
+  window.__mvPaintUncommittedCamera = paintUncommittedCamera;
+  window.__mvGestureGeneration = function () { return gestureGeneration; };
   function restoreOwnedCamera(generation, gestureId) {
     const foreign = gestureId ? String(gestureId) : "";
     if (!foreign || generation !== gestureGeneration) return;
@@ -3892,7 +3945,9 @@
     window.__mvUnadoptedWheel = null;
     if (window.__mvRetireDragSample) window.__mvRetireDragSample();
     window.__mvGestureEndedAt = 0;
+    window.__mvGestureUserRelayoutAt = 0;
     window.__mvGesturePointerRelayoutSeen = false;
+    watchGestureCameraCommit();
     window.__mvCaptureCommitSeen = false;
     window.__mvProgrammaticCameraStamp = null;
     const sceneId = canvasSceneId() || window.__mvGestureSceneId || "";
@@ -3917,6 +3972,7 @@
     const stamped = window.__mvGestureSceneId || "";
     armForeignCameraGuard(generation, stamped);
     scheduleOwnedCameraRestore(generation, stamped);
+    paintUncommittedCamera(generation, stamped);
     setTimeout(function() {
       // A later pointerdown on the same scene reuses this id. Clearing by
       // id alone drops that newer drag, and its relayout then lands on
@@ -3929,6 +3985,7 @@
     if (interactionActive) markInactiveSoon();
     const generation = gestureGeneration;
     const stamped = window.__mvGestureSceneId || "";
+    paintUncommittedCamera(generation, stamped);
     setTimeout(function() {
       // pointerup releases the name after 1000ms. Cancel has to do the
       // same, or the name stays and a later projection relayout is stored

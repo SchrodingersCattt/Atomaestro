@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0", "setuptools_scm[toml]>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "matter-vis"
+name = "atomaestro"
 dynamic = ["version"]
-description = "Publication-quality atomistic structure and trajectory visualization — CLI, browser viewer, animation, ORTEP, and terminal TUI"
+description = "Atomaestro: publication-quality atomistic structure and trajectory visualization — CLI, browser viewer, animation, ORTEP, and terminal TUI"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -46,6 +46,11 @@ dependencies = [
     # to major. Exclusive shell selection keeps whole orientations.
     "molcrys-kit[desktop] @ git+https://github.com/SchrodingersCattt/MolCrysKit.git@2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6",
 ]
+
+[project.urls]
+Homepage = "https://github.com/SchrodingersCattt/Atomaestro"
+Repository = "https://github.com/SchrodingersCattt/Atomaestro"
+Issues = "https://github.com/SchrodingersCattt/Atomaestro/issues"
 
 [project.scripts]
 mat-vis = "mat_viewer.cli:main"
@@ -88,7 +93,7 @@ test = [
     "pyvista",
     "tomli; python_version < '3.11'",
 ]
-dev = ["matter-vis[all,test]", "build", "ruff"]
+dev = ["atomaestro[all,test]", "build", "ruff"]
 
 [tool.setuptools]
 license-files = ["LICENSE"]

@@ -43,7 +43,7 @@ def test_core_static_requirements_need_no_extra() -> None:
 
     assert result.capabilities == ("core",)
     assert result.extras == ()
-    assert result.install_command == 'python -m pip install "matter-vis"'
+    assert result.install_command == 'python -m pip install "atomaestro"'
 
 
 def test_optional_requirements_combine_minimal_extras() -> None:
@@ -52,7 +52,7 @@ def test_optional_requirements_combine_minimal_extras() -> None:
     assert result.capabilities == ("core", "cube", "animation")
     assert result.extras == ("animation", "cube")
     assert result.install_command == (
-        'python -m pip install "matter-vis[animation,cube]"'
+        'python -m pip install "atomaestro[animation,cube]"'
     )
 
 
@@ -63,7 +63,7 @@ def test_web_static_aliases_combine_web_and_plotly_export(requirement: str) -> N
     assert result.capabilities == ("core", "web", "plotly-export")
     assert result.extras == ("plotly-export", "web")
     assert result.install_command == (
-        'python -m pip install "matter-vis[plotly-export,web]"'
+        'python -m pip install "atomaestro[plotly-export,web]"'
     )
 
 
@@ -280,7 +280,7 @@ def test_cube_tui_cli_reports_exact_combined_install_when_cube_is_missing(
     assert exc.value.code == 2
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert 'python -m pip install "matter-vis[cube,tui]"' in captured.err
+    assert 'python -m pip install "atomaestro[cube,tui]"' in captured.err
 
 
 def test_cube_tui_loader_reports_exact_combined_install_before_loading(
@@ -299,7 +299,7 @@ def test_cube_tui_loader_reports_exact_combined_install_before_loading(
 
     with pytest.raises(
         RuntimeError,
-        match=r'python -m pip install "matter-vis\[cube,tui\]"',
+        match=r'python -m pip install "atomaestro\[cube,tui\]"',
     ):
         load_for_tui("not-loaded.cube")
 
@@ -455,7 +455,7 @@ def test_python_render_result_contains_agent_manifest(
     assert result.metadata["camera"]["projection"] == "orthographic"
     assert result.metadata["source"]["input_format"] == "cif"
     assert result.metadata["source"]["sha256"]
-    assert result.metadata["install"] == 'python -m pip install "matter-vis"'
+    assert result.metadata["install"] == 'python -m pip install "atomaestro"'
     assert result.metadata["fallback"] is None
 
 

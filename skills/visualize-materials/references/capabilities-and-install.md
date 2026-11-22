@@ -4,7 +4,13 @@ Read this only when the direct base render reports a missing command/capability
 or the request explicitly needs an optional frontend. The capability resolver is
 authoritative; do not maintain a second dependency guess in an agent script.
 
-If the `mat-vis` command itself is missing, install the supported releases once:
+The matrix below installs the `atomaestro` distribution built by this
+repository. The command remains `mat-vis`. Python imports remain `mat_viewer`.
+
+`atomaestro` is not on PyPI until the next confirmed release. The last
+published release is still `matter-vis` 0.0.6. PyPI cannot rename that
+project. Do not install both full distributions into one environment. Until
+`atomaestro` is published, install the released package:
 
 ```bash
 python -m pip install "molcrys-kit==0.8.0" "matter-vis==0.0.6"
@@ -25,29 +31,29 @@ error. Never install `[all]` when a smaller reported extra is sufficient.
 <!-- capability-matrix:start -->
 | What you need | Resolver requirement | Required installation |
 |---|---|---|
-| CPU 3D or Matplotlib projected 2D PNG/PDF/SVG; structure inspection; ORTEP; rings; polyhedra | `core` | `python -m pip install "matter-vis"` |
-| Interactive Plotly/WebGL HTML | `plotly` | `python -m pip install "matter-vis[plotly]"` |
-| Plotly PNG/PDF/SVG through Kaleido | `plotly-export` | `python -m pip install "matter-vis[plotly-export]"` |
-| Dash viewer, REST, and WebSocket service | `web` | `python -m pip install "matter-vis[web]"` |
-| Interactive terminal UI | `tui` | `python -m pip install "matter-vis[tui]"` |
-| Cube input inspection and isosurfaces | `cube` | `python -m pip install "matter-vis[cube]"` |
-| PyVista offscreen cube figures | `vtk` | `python -m pip install "matter-vis[vtk]"` |
-| GIF/MP4 encoding | `animation` | `python -m pip install "matter-vis[animation]"` |
-| Native offscreen opaque PNG via wgpu | `gpu` | `python -m pip install "matter-vis[gpu]"` |
+| CPU 3D or Matplotlib projected 2D PNG/PDF/SVG; structure inspection; ORTEP; rings; polyhedra | `core` | `python -m pip install "atomaestro"` |
+| Interactive Plotly/WebGL HTML | `plotly` | `python -m pip install "atomaestro[plotly]"` |
+| Plotly PNG/PDF/SVG through Kaleido | `plotly-export` | `python -m pip install "atomaestro[plotly-export]"` |
+| Dash viewer, REST, and WebSocket service | `web` | `python -m pip install "atomaestro[web]"` |
+| Interactive terminal UI | `tui` | `python -m pip install "atomaestro[tui]"` |
+| Cube input inspection and isosurfaces | `cube` | `python -m pip install "atomaestro[cube]"` |
+| PyVista offscreen cube figures | `vtk` | `python -m pip install "atomaestro[vtk]"` |
+| GIF/MP4 encoding | `animation` | `python -m pip install "atomaestro[animation]"` |
+| Native offscreen opaque PNG via wgpu | `gpu` | `python -m pip install "atomaestro[gpu]"` |
 <!-- capability-matrix:end -->
 
 The `vtk` extra does not install a system OpenGL library. Windows and macOS
 use the native VTK window class and do not need `DISPLAY`. Headless Linux
 needs OSMesa (Debian/Ubuntu package `libosmesa6`) or EGL. On Linux the figure
 call raises `RuntimeError` when neither a display nor one of those libraries
-is loadable. MatterVis does not run `apt` or download that library.
+is loadable. Atomaestro does not run `apt` or download that library.
 
 Combined Web operations intentionally cross two optional boundaries:
 
 | What you need | Resolver requirement | Required installation |
 |---|---|---|
-| REST/API browser screenshot | `web-screenshot` | `python -m pip install "matter-vis[plotly-export,web]"` |
-| Web UI static Plotly export | `static-web-export` | `python -m pip install "matter-vis[plotly-export,web]"` |
+| REST/API browser screenshot | `web-screenshot` | `python -m pip install "atomaestro[plotly-export,web]"` |
+| Web UI static Plotly export | `static-web-export` | `python -m pip install "atomaestro[plotly-export,web]"` |
 
 These are requirement aliases, not new extras. They combine the Web service
 with the Plotly/Kaleido encoder and never substitute a CPU image or placeholder
@@ -56,11 +62,11 @@ PNG when export fails.
 Combine only the extras the request needs, for example:
 
 ```bash
-python -m pip install "matter-vis[cube,animation]"
-python -m pip install "matter-vis[web,tui]"
+python -m pip install "atomaestro[cube,animation]"
+python -m pip install "atomaestro[web,tui]"
 ```
 
-`python -m pip install "matter-vis[all]"` is reserved for development or a
+`python -m pip install "atomaestro[all]"` is reserved for development or a
 caller who explicitly wants every frontend.
 
 ## Chrome and Kaleido
@@ -90,5 +96,5 @@ case-insensitive lightweight CIF formula/Z metadata, and
 `molcrys_kit.io.read_mryx`.
 PyPI `0.8.0` does not. Install the checkout with `pip install -e .` and do
 not force `molcrys-kit==0.8.0` over that pin.
-Released users should follow the resolver's ordinary `matter-vis[...]` command;
+Released users should follow the resolver's ordinary `atomaestro[...]` command;
 do not put a Git URL into generated runtime requirements.

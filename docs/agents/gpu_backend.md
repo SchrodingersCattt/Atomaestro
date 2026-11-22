@@ -4,10 +4,10 @@ Atomaestro exposes the optional native backend through the same immutable
 `RenderPlan` used by the CPU and Plotly adapters. It is selected explicitly:
 
 ```bash
-python -m pip install "matter-vis[gpu]"
+python -m pip install "atomaestro[gpu]"
 mat-vis capabilities --require gpu --json
 mat-vis render structure.cif -o figure.png --backend gpu --json
-python -m pip install "matter-vis[gpu,animation]"
+python -m pip install "atomaestro[gpu,animation]"
 mat-vis render trajectory.extxyz -o movie.gif --backend gpu --json
 ```
 
@@ -39,7 +39,7 @@ Smooth shading keeps per-vertex lighting. Neither mode matches the analytic
 CPU sphere and cylinder rasters pixel for pixel.
 
 PNG, GIF, and MP4 are the supported outputs. HTML, PDF, and SVG stay on their
-existing explicit backends. GIF and MP4 also require `matter-vis[animation]`.
+existing explicit backends. GIF and MP4 also require `atomaestro[animation]`.
 One `GpuSession` draws the whole animation, with at most one frame in flight.
 Ball and ball-and-stick frames that are already `FrameBatch` arrays, and that
 do not request a display mode, labels, axes, groups, overlays, topology, or

@@ -83,16 +83,16 @@ is not a vector backend.
 The base path may import only base dependencies. Optional modules are loaded
 at the operation that needs them:
 
-- Plotly HTML: `matter-vis[plotly]`;
-- Plotly static export: `matter-vis[plotly-export]`;
-- Dash, REST, and WebSocket: `matter-vis[web]`;
+- Plotly HTML: `atomaestro[plotly]`;
+- Plotly static export: `atomaestro[plotly-export]`;
+- Dash, REST, and WebSocket: `atomaestro[web]`;
 - Web/API screenshots and the Web UI's Plotly static export:
-  `matter-vis[plotly-export,web]` (requirements `web-screenshot` and
+  `atomaestro[plotly-export,web]` (requirements `web-screenshot` and
   `static-web-export`);
-- terminal UI: `matter-vis[tui]`;
-- Cube isosurfaces: `matter-vis[cube]`;
-- GIF/MP4 encoding: `matter-vis[animation]`.
-- native offscreen PNG/GIF/MP4: `matter-vis[gpu]` (wgpu; runtime device probe required; GIF/MP4 also need `matter-vis[animation]`).
+- terminal UI: `atomaestro[tui]`;
+- Cube isosurfaces: `atomaestro[cube]`;
+- GIF/MP4 encoding: `atomaestro[animation]`.
+- native offscreen PNG/GIF/MP4: `atomaestro[gpu]` (wgpu; runtime device probe required; GIF/MP4 also need `atomaestro[animation]`).
 
 The GPU backend is explicit. It lowers the same immutable `RenderPlan`,
 draws opaque meshes and instanced spheres, cylinders, and solid ellipsoids,

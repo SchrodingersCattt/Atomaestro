@@ -5,6 +5,10 @@ its HTTP/WebSocket service or by importing `mat_viewer` from Python.
 If you are **modifying** the codebase itself, read [`../../AGENTS.md`](../../AGENTS.md)
 instead.
 
+Install the `atomaestro` distribution and keep the `mat-vis` command.
+The published 0.0.6 release is still `matter-vis`; do not install both full
+distributions in one environment. See [the migration guide](../rebranding.md).
+
 ## Where to drop in
 
 Start from the caller intent and follow the arrow to the doc that owns

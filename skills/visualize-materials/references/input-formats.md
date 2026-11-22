@@ -1,6 +1,6 @@
 # Atomistic Input Formats
 
-All format adapters converge on one canonical MatterVis structure frame before
+All format adapters converge on one canonical Atomaestro structure frame before
 scene construction. Do not create a format-specific rendering path.
 
 For ASE-backed inputs, canonical `StructureFrame` objects preserve frame
@@ -33,7 +33,7 @@ mat-vis render INPUT -o figure.png --backend cpu
 Supported directly:
 
 - CIF through MolCrysKit's public renderer-ready structure records;
-- Cube with volumetric data preserved (`matter-vis[cube]`, no Plotly required);
+- Cube with volumetric data preserved (`atomaestro[cube]`, no Plotly required);
 - POSCAR, CONTCAR, and .vasp;
 - XYZ and extxyz;
 - ASE .traj;
@@ -68,6 +68,6 @@ mat-vis render run.dump --type-map O H -o trajectory.mp4 --stride 10 --fps 24
 ~~~
 
 --frame-range uses Python's half-open START:STOP[:STEP] slice semantics.
---stride subsamples that selection. MatterVis applies one camera and one physical
+--stride subsamples that selection. Atomaestro applies one camera and one physical
 viewport scale to every selected frame. Property-colored trajectories also use
 one exact range over all selected source frames, before repeat/display filtering.

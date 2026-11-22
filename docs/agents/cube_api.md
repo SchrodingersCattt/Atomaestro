@@ -17,10 +17,10 @@ flowchart LR
 
 ## Installation boundary
 
-- Parse ordinary structures and render PNG/PDF/SVG: base `matter-vis`.
-- Parse a Cube grid and extract isosurfaces: `matter-vis[cube]`.
-- Render a Cube scene to Plotly HTML: `matter-vis[cube,plotly]`.
-- Use Plotly/Kaleido static export: `matter-vis[cube,plotly-export]`.
+- Parse ordinary structures and render PNG/PDF/SVG: base `atomaestro`.
+- Parse a Cube grid and extract isosurfaces: `atomaestro[cube]`.
+- Render a Cube scene to Plotly HTML: `atomaestro[cube,plotly]`.
+- Use Plotly/Kaleido static export: `atomaestro[cube,plotly-export]`.
 
 Run `mat-vis capabilities --require cube --json` for the exact command in the
 current environment. Importing `mat_viewer`, `mat_viewer.cube`, or
@@ -448,7 +448,7 @@ helper. The isosurface shade is a shared record, described below.
 Install the Python extra with:
 
 ```console
-python -m pip install "matter-vis[vtk]"
+python -m pip install "atomaestro[vtk]"
 ```
 
 PyVista is imported only when the function is called. Windows selects

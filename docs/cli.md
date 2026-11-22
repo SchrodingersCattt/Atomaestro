@@ -2,7 +2,9 @@
 
 Atomaestro renders atomistic structures and trajectories without launching the
 browser viewer. Every input format is parsed into the same canonical structure
-frame before scene construction.
+frame before scene construction. The command remains `mat-vis`. Optional
+extras in this tree use the `atomaestro` distribution; the published 0.0.6
+release is still `matter-vis`. See [the migration guide](rebranding.md).
 
 ## Quick start
 
@@ -288,7 +290,7 @@ the numeric base renderer. PNG, GIF, and MP4 can all use the batch path.
 
 Use `--backend cpu|matplotlib|plotly|gpu`; there is no backend or representation fallback.
 The `gpu` backend is opt-in for PNG, GIF, and MP4. Install
-`matter-vis[gpu]` (and `matter-vis[animation]` for GIF/MP4) and verify a
+`atomaestro[gpu]` (and `atomaestro[animation]` for GIF/MP4) and verify a
 usable adapter with `mat-vis capabilities --require gpu --json` before
 rendering. Transparent primitives, dashed lines, text, per-vertex mesh
 colors, per-endpoint line colors, and cube isosurface meshes fail explicitly.
@@ -688,7 +690,7 @@ coordinates use `qhull_numerical_failure` as well.
 
 ## `serve` — Browser viewer
 
-Requires `python -m pip install "matter-vis[web]"`; this extra includes Plotly
+Requires `python -m pip install "atomaestro[web]"`; this extra includes Plotly
 and `dash>=2.18.2`.
 
 Dash 2.18.2 through 3.x accept only a string for `dcc.Tab.label`. Those
@@ -720,9 +722,9 @@ mat-vis serve [options]
 
 ## tui — Terminal view
 
-Ordinary structure input requires `python -m pip install "matter-vis[tui]"`.
+Ordinary structure input requires `python -m pip install "atomaestro[tui]"`.
 Cube input requires the combined
-`python -m pip install "matter-vis[cube,tui]"`; resolve it with
+`python -m pip install "atomaestro[cube,tui]"`; resolve it with
 `mat-vis capabilities --require cube tui --json`. Use `mat-vis inspect --json`
 for normal bounded agent diagnosis without installing Textual.
 

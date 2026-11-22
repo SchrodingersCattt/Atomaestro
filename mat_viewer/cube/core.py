@@ -45,8 +45,8 @@ def _plotly_go():
         import plotly.graph_objects as go
     except ImportError as exc:
         raise ImportError(
-            "Plotly cube traces require `pip install matter-vis[plotly]`. "
-            "CPU cube rendering requires only `matter-vis[cube]`."
+            "Plotly cube traces require `pip install atomaestro[plotly]`. "
+            "CPU cube rendering requires only `atomaestro[cube]`."
         ) from exc
     return go
 
@@ -56,7 +56,7 @@ def _plotly_make_subplots(*args, **kwargs):
         from plotly.subplots import make_subplots
     except ImportError as exc:
         raise ImportError(
-            "Plotly cube panels require `pip install matter-vis[plotly]`."
+            "Plotly cube panels require `pip install atomaestro[plotly]`."
         ) from exc
     return make_subplots(*args, **kwargs)
 

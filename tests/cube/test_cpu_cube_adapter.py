@@ -314,7 +314,7 @@ def test_cube_cli_preflight_and_cpu_render_are_plotly_free(
     assert output.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
     assert payload["backend"] == "cpu"
     assert payload["source"]["input_format"] == "cube"
-    assert payload["install"] == 'python -m pip install "matter-vis[cube]"'
+    assert payload["install"] == 'python -m pip install "atomaestro[cube]"'
 
 
 def test_explicit_legacy_cube_trace_fails_when_cube_extra_is_missing(
@@ -331,7 +331,7 @@ def test_explicit_legacy_cube_trace_fails_when_cube_extra_is_missing(
 
     monkeypatch.setattr(builtins, "__import__", blocked_import)
 
-    with pytest.raises(ImportError, match=r"matter-vis\[cube\]"):
+    with pytest.raises(ImportError, match=r"atomaestro\[cube\]"):
         isosurface_overlay_traces(
             {"cube_data": _cube(tmp_path)},
             {"isosurface_enabled": True},

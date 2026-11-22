@@ -165,7 +165,7 @@ Each phase should be small enough to review by invariant:
 
 ## Invariants Across All Phases
 
-- Do not reimplement MolCrysKit chemistry in MatterVis.
+- Do not reimplement MolCrysKit chemistry in Atomaestro.
 - Do not mutate global palettes or module-level render state.
 - Do not collapse display mode, transform mode, and camera mode into one flag.
 - Do not preserve compatibility with broken in-branch behavior when a documented

@@ -15,7 +15,7 @@ def _plotly_go():
         import plotly.graph_objects as go
     except ImportError as exc:
         raise ImportError(
-            "Plotly ORTEP traces require `pip install matter-vis[plotly]`. "
+            "Plotly ORTEP traces require `pip install atomaestro[plotly]`. "
             "CPU PNG/PDF/SVG ORTEP rendering is available in the base install."
         ) from exc
     return go

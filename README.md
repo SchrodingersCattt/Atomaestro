@@ -5,7 +5,7 @@
 [![PyPI](https://img.shields.io/pypi/v/matter-vis.svg)](https://pypi.org/project/matter-vis/)
 [![CI](https://github.com/SchrodingersCattt/Atomaestro/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SchrodingersCattt/Atomaestro/actions/workflows/ci.yml)
 
-> **Repository rename:** **MatterVis is now Atomaestro** on GitHub. The current PyPI distribution remains [`matter-vis`](https://pypi.org/project/matter-vis/), with the `mat-vis` CLI and `mat_viewer` Python imports unchanged. A future release is planned to introduce `atomaestro` packaging and a matching CLI command while keeping the existing interfaces compatible. For exact current-versus-planned behavior, see the [migration guide](docs/rebranding.md) and [tracking issue #316](https://github.com/SchrodingersCattt/Atomaestro/issues/316).
+> **Package migration:** The GitHub project is **Atomaestro** (formerly MatterVis). This repository builds the `atomaestro` distribution. The command stays `mat-vis`, and Python imports stay `mat_viewer`. PyPI still serves [`matter-vis` 0.0.6](https://pypi.org/project/matter-vis/) until the next confirmed release; `atomaestro` is not published yet. Do not install both full distributions in one environment. Details: [migration guide](docs/rebranding.md) and [issue #316](https://github.com/SchrodingersCattt/Atomaestro/issues/316).
 
 ## Overview
 
@@ -51,14 +51,24 @@ can use the revision/write APIs directly without adopting the catalog.
 
 ## Installation
 
-The GitHub repository is now named **Atomaestro**, but the published package
-and its executable have not yet been renamed. The commands below are the
-currently supported installation and usage paths. See the [migration guide](docs/rebranding.md).
+The command is `mat-vis`. Imports remain `mat_viewer`. This repository's
+distribution name is `atomaestro`. See the [migration guide](docs/rebranding.md).
 
-### From PyPI (recommended)
+### From PyPI
+
+`atomaestro` is the new project and is not on PyPI until the next confirmed
+release:
 
 ```bash
-pip install matter-vis
+pip install atomaestro
+```
+
+The release published today is still `matter-vis` 0.0.6. The PyPI badge above
+points at that release. Use it until `atomaestro` exists, and do not install
+both into the same environment:
+
+```bash
+pip install "matter-vis==0.0.6"
 ```
 
 ### From source (development)
@@ -106,7 +116,7 @@ until the API is on PyPI.
 
 ### CLI — one-liner from CIF to figure
 
-Install the currently published `matter-vis` distribution, then render a crystal structure:
+The command is `mat-vis`. Render a crystal structure:
 
 ```bash
 # Primary terminal observation and chemistry inspection
@@ -129,7 +139,7 @@ mat-vis render structure.cif -o plastic.png --backend cpu \
   --surface-material hard_plastic --renderer general
 
 # Optional native offscreen GPU PNG (explicit; no CPU fallback)
-python -m pip install "matter-vis[gpu]"
+python -m pip install "atomaestro[gpu]"
 mat-vis capabilities --require gpu --json
 mat-vis render structure.cif -o figure-gpu.png --backend gpu --json
 
@@ -147,7 +157,7 @@ mat-vis render structure.cif -o si_figure.html --backend plotly \
   --show-hydrogen --show-labels
 
 # Launch the interactive browser viewer (Dash 2.18.2 or newer)
-python -m pip install "matter-vis[web]"
+python -m pip install "atomaestro[web]"
 mat-vis serve --cif structure.cif
 ```
 
@@ -170,7 +180,7 @@ result = render(plan, output="dap4.svg", backend="cpu")
 
 ## Command Line Interface
 
-Installing the current `matter-vis` distribution provides the `mat-vis` command. The next planned release will introduce `atomaestro` as a new primary command while keeping `mat-vis` compatible. The CLI is self-documenting;
+Installing `atomaestro` provides the `mat-vis` command. There is no second command. The CLI is self-documenting;
 use `--help` at any level to see the exact arguments:
 
 ```bash

@@ -359,7 +359,9 @@ meshes = cube_isosurface_meshes(
 ```
 
 `RenderSpec(isosurface_density_mask=True, isosurface_density_cube=..., isosurface_density_cutoff=...)`
-is the same switch for `prepare_render` and `render`.
+is the same switch for `prepare_render` and `render`. Component-size and
+atom-mask style keys do not run on `mat-vis render`. An interaction
+isosurface uses an explicit isovalue, a stride, and this opt-in density mask.
 
 ## Isosurface wireframe
 
@@ -597,6 +599,3 @@ in view when `parallel_scale` covers that cell. Image-selection policies such as
 `nearest_atom` choose periodic surface images; they are distinct from these
 clipping policies. The backend-neutral CLI and interactive viewer do not
 take `boundary_policy`.
-explicit isovalue inside the scalar range. Component-size and atom-mask style
-keys do not run on `mat-vis render`. Use an explicit isovalue, stride, and,
-for an interaction isosurface, the opt-in density mask.

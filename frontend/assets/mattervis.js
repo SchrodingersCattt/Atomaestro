@@ -1797,6 +1797,26 @@
         }
         const allowCamera = name === "relayout" && layout && (layout["scene.camera"] || (layout.scene && layout.scene.camera) ||
           Object.keys(layout).some(function (key) { return key.indexOf("scene.camera.") === 0; }));
+        /* The gl eye can already show the orbit while the stored sample
+         * still holds the pre-drag pose. Sample the displayed camera at
+         * the moment this relayout is requested, then put that eye back
+         * before the promise the caller is awaiting resolves. A restore
+         * relayout sets __mvRestoringDrag first, so it does not sample
+         * the eye it is in the process of replacing. */
+        const captureDrag = !!(
+          allowCamera && target && !target.__mvRestoringDrag && sameSceneDragInProgress(target)
+        );
+        if (captureDrag && typeof window.__mvNoteInProgressDrag === "function") {
+          window.__mvNoteInProgressDrag(target);
+        }
+        function withDragRestore(result) {
+          if (!captureDrag || typeof window.__mvRestoreInProgressDrag !== "function") {
+            return Promise.resolve(result);
+          }
+          return Promise.resolve(window.__mvRestoreInProgressDrag(target)).then(function () {
+            return result;
+          });
+        }
         const queueState = target && target.__mvRenderQueueState;
         if (allowCamera && queueState && queueState.running && !queueState.reentrantToken && !queueState.parked) {
           return enqueueRender(target, function () {
@@ -1805,7 +1825,7 @@
             if (window.MatterVisViewCamera && typeof window.MatterVisViewCamera.installContextLoss === "function") {
               window.MatterVisViewCamera.installContextLoss(target);
             }
-            return result;
+            return withDragRestore(result);
           });
         }
         if (allowCamera) holdCameraRelayout();
@@ -1823,7 +1843,7 @@
           if (window.MatterVisViewCamera && typeof window.MatterVisViewCamera.installContextLoss === "function") {
             window.MatterVisViewCamera.installContextLoss(target);
           }
-          return result;
+          return withDragRestore(result);
         }, function (err) {
           clearCameraAllow();
           throw err;
@@ -2546,6 +2566,24 @@
     inspector.style.left = (Number(x) + 10) + "px";
     inspector.style.top = (Number(y) + 10) + "px";
   }
+  let selectionAttemptToken=0;
+  function currentSceneGeneration(){
+    const gd=graphDiv();
+    const render=renderMetadataFromLayout(gd && gd.layout);
+    if(!render || render.scene_generation===undefined || render.scene_generation===null || render.scene_generation==="") return "";
+    return String(render.scene_generation);
+  }
+  function selectionAttemptCurrent(token, scene, generation){
+    if(token!==selectionAttemptToken) return false;
+    if(String(scene||"")!==String(currentSceneId()||"")) return false;
+    if(String(generation||"")!==currentSceneGeneration()) return false;
+    return true;
+  }
+  window.MatterVisSelectionFence={
+    current: selectionAttemptCurrent,
+    sceneGeneration: currentSceneGeneration,
+    bump: function(){ selectionAttemptToken+=1; return selectionAttemptToken; },
+  };
   function bindRightClick() {
     const container = document.getElementById("crystal-graph");
     const inner = container && container.querySelector(".js-plotly-plot");
@@ -2624,7 +2662,8 @@
       if(e.button===2){secondary={x:e.clientX,y:e.clientY,scene:currentSceneId(),moved:false};pendingContext=false;return;}
       secondary=null;pendingContext=false;
       if(e.button!==0) return;
-      down={x:e.clientX,y:e.clientY,scene:currentSceneId(),moved:false};
+      selectionAttemptToken+=1;
+      down={x:e.clientX,y:e.clientY,scene:currentSceneId(),generation:currentSceneGeneration(),attempt:selectionAttemptToken,moved:false};
     },{passive:true});
     function publishWhenGutterReady(target, mode) {
       const opening = mode !== "clear" && !!target;
@@ -2633,27 +2672,48 @@
       if (!dock || typeof dock.afterGutter !== "function") { run(); return; }
       dock.afterGutter(opening, run);
     }
-    function select(e){
+    function select(e, gesture){
       const mode=e.ctrlKey||e.metaKey?"toggle":e.shiftKey?"add":"replace";
+      const started=Date.now();
+      // A selection edit rebuilds the figure. While that frame is still
+      // landing, the same pixel can miss and must not wipe the set. The
+      // bound waits out that in-progress frame; it is not the caller's
+      // settle timeout. The wait belongs to the scene and generation
+      // captured with the pointer. A newer pointer, a scene change, or a
+      // new scene generation cancels it. The graph generation that ticks
+      // while the frame settles does not.
+      const FRAME_SETTLE_MS=15000;
+      if(!gesture || !gesture.attempt) selectionAttemptToken+=1;
+      const token=gesture && gesture.attempt ? gesture.attempt : selectionAttemptToken;
+      const scene=gesture && gesture.scene!==undefined && gesture.scene!==null ? gesture.scene : currentSceneId();
+      const generation=gesture && gesture.generation!==undefined && gesture.generation!==null ? gesture.generation : currentSceneGeneration();
       function apply(target){
         publishWhenGutterReady(target, target?mode:"clear");
       }
-      function attempt(allowRetry){
+      function rendering(){
+        const busy=document.getElementById("mv-status-busy");
+        if(busy && !busy.classList.contains("is-hidden")) return true;
+        const node=document.getElementById("mv-render-status");
+        return !!(node && !node.hidden);
+      }
+      function attempt(){
+        if(!selectionAttemptCurrent(token, scene, generation)) return;
         const gd=graphDiv();
         const indexed=gd && window.MatterVisScenePicking && window.MatterVisScenePicking.index
           ? window.MatterVisScenePicking.index(gd) : null;
         const target=resolve(e,!!e.altKey);
         if(target){apply(target);return;}
-        // A rebuild can replace the plot before its pick index exists. An
-        // empty hit on a ready index still clears; an unready index does not.
         const unready=!indexed || !indexed.primitives || !indexed.primitives.length;
-        if(unready && allowRetry){
-          requestAnimationFrame(function(){attempt(false);});
+        if((unready || rendering()) && Date.now()-started<FRAME_SETTLE_MS){
+          requestAnimationFrame(attempt);
           return;
         }
-        if(!unready) apply(null);
+        if(!selectionAttemptCurrent(token, scene, generation)) return;
+        // Empty space clears only a plain click. Shift/Ctrl keep the set
+        // when the pointer is not on a target. An unready index does not clear.
+        if(!unready && mode==="replace") apply(null);
       }
-      attempt(true);
+      attempt();
     }
     container.addEventListener("pointerup",function(e){
       if(secondary){const gesture=secondary;secondary=null;if(pendingContext && !gesture.moved && gesture.scene===currentSceneId()) openContext(e);pendingContext=false;return;}
@@ -2664,7 +2724,7 @@
           gesture.scene!==currentSceneId()) return;
       // The plot node can be replaced between pointerdown and pointerup.
       // The scene is unchanged, so the click still belongs to this gesture.
-      select(e);
+      select(e, gesture);
     });
     container.addEventListener("pointercancel",function(){down=null;secondary=null;pendingContext=false;invalidateSemanticHover();paint();});
     container.addEventListener("click",function(e){
@@ -3338,9 +3398,53 @@
     }
     if (window.__mvCensus) window.__mvCensus.webglContexts = trackedGL.length;
   }
+  /* The boundary checkbox can flip before the figure that was built for
+   * the previous option is replaced. Restyle the cell traces that are
+   * already on the canvas so a fitted camera is not painted around a
+   * hidden box. A figure that has no cell trace yet is left alone; the
+   * next complete frame carries the box. */
+  function syncCellBoundaryVisibility(gd) {
+    const box = document.querySelector("#display-options input[value='unit_cell_box']");
+    if (!box || !gd || !gd.data || !window.Plotly || typeof window.Plotly.restyle !== "function") return;
+    if (gd.__mvCellBoundarySync) return;
+    const want = !!box.checked;
+    const indices = [];
+    const values = [];
+    for (let index = 0; index < gd.data.length; index += 1) {
+      const trace = gd.data[index];
+      const meta = trace && trace.meta;
+      const role = meta && (meta.mv_role || meta.role);
+      if (role !== "unit_cell") continue;
+      const shown = !trace || trace.visible !== false;
+      if (shown === want) continue;
+      indices.push(index);
+      values.push(want);
+    }
+    if (!indices.length) return;
+    gd.__mvCellBoundarySync = true;
+    let pending = null;
+    try {
+      pending = window.Plotly.restyle(gd, {visible: values}, indices);
+    } catch (_) {
+      gd.__mvCellBoundarySync = false;
+      return;
+    }
+    const clear = function () { gd.__mvCellBoundarySync = false; };
+    if (pending && typeof pending.then === "function") pending.then(clear, clear);
+    else clear();
+  }
+  function bindCellBoundarySync() {
+    const box = document.querySelector("#display-options input[value='unit_cell_box']");
+    if (!box || box.__mvCellBoundaryBound) return;
+    box.__mvCellBoundaryBound = true;
+    box.addEventListener("change", function () {
+      syncCellBoundaryVisibility(graphDiv());
+    });
+  }
   function rebindAll() {
     prunePersistentTargets();
     bindRightClick();
+    bindCellBoundarySync();
     bindBoxSelect();
     bindDisorderHover();
     bindSceneTabIntent();
@@ -3348,6 +3452,7 @@
     syncSceneTabSelection(true);
     flushQueuedSceneFigure();
     const gd = graphDiv();
+    syncCellBoundaryVisibility(gd);
     releaseStaleWebGL(gd);
     if (gd && window.MatterVisViewCamera && typeof window.MatterVisViewCamera.installWheelZoom === "function") {
       window.MatterVisViewCamera.installWheelZoom(gd);
@@ -3359,6 +3464,7 @@
         restoreOwnedCamera(gestureGeneration, foreignGuardScene());
       });
       gd.on("plotly_afterplot", function () {
+        if (typeof syncCellBoundaryVisibility === "function") syncCellBoundaryVisibility(gd);
         if (window.__mvRestoreInProgressDrag) window.__mvRestoreInProgressDrag(gd);
       });
     }
@@ -3609,10 +3715,15 @@
       }, 500);
     }
   }
-  document.addEventListener("pointermove", function () {
+  function sampleDragFromPointer() {
     const gd = graphDiv();
     if (gd && window.__mvNoteInProgressDrag) window.__mvNoteInProgressDrag(gd);
-  }, true);
+  }
+  document.addEventListener("pointermove", sampleDragFromPointer, true);
+  /* Plotly's orbit listens for mouse events. A move that updates the gl
+   * eye without a pointermove must still store that eye before a later
+   * relayout copies the pre-orbit pose back. */
+  document.addEventListener("mousemove", sampleDragFromPointer, true);
   document.addEventListener("pointerdown", function(e) {
     if (!inGraph(e.target)) return;
     window.__mvUnadoptedWheel = null;

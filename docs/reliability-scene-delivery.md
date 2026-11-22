@@ -204,7 +204,18 @@ must not change scene B, and a stale revision must not replace a newer one.
   receive the pre-remount drag eye. A camera command that arrives during that
   replot still wins. A frame or internal replot that finishes while that
   drag is still down puts that gesture's sampled eye back when the
-  generation and session still match.   A figure react that started before
+  generation and session still match. A camera relayout requested while
+  that drag is still down samples the displayed WebGL eye before the
+  relayout is applied and puts that eye back before the relayout
+  promise resolves, including when the relayout had to wait behind a
+  frame. A mouse orbit is sampled on mouse move as well as pointer
+  move, because the gl eye can move without a pointer event. The
+  unit-cell boundary checkbox and the traces on the canvas are kept
+  together: a checked box restyles an already-mounted cell trace
+  visible, and a hidden cell trace on a later frame is shown again,
+  before that frame is left as the painted fit. A fit whose ranges
+  include the cell is not treated as painted until that visible cell
+  trace is on the canvas.   A figure react that started before
   pointer-up captured the pre-drag camera and can finish after the button
   is up; that completion puts the same sampled eye back once, unless a
   camera relayout has already landed after pointer-up. A react that

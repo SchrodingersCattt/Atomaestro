@@ -206,9 +206,15 @@ Notes for callers:
   store is what the canvas paints. A transient camera revision is read back only for that same generation and
   epoch. A width/height replot during an in-progress drag restores the live
   drag camera only when that drag's scene generation and, when both sides
-  have one, server session still match the mounted figure. A frame or
+  have one, server session still match the mounted figure.   A frame or
   replot that finishes during that drag puts that gesture's sampled eye
-  back under the same rule.   A figure react that started before pointer-up
+  back under the same rule. A camera relayout that arrives while the
+  drag is still down samples the eye the WebGL scene is showing before
+  Plotly applies that relayout, and puts that eye back before the
+  relayout promise resolves. The sample is that displayed eye, so a
+  layout pose from before the orbit cannot replace the drag. A mouse
+  move that Plotly turns into an orbit is sampled even when it does not
+  also emit a pointer move.   A figure react that started before pointer-up
   still puts that sampled eye back if it finishes after the button is up,
   unless a camera relayout has already landed after pointer-up.
   A react that starts after pointer-up does not. The sample is cleared

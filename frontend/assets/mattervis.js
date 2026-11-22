@@ -212,6 +212,26 @@
     }
     resyncScene(sceneId);
   }
+  function sceneResyncPayloads(rows) {
+    // The journal for one scene can end on a camera envelope. That envelope
+    // cannot paint a canvas that is still showing another scene, and the
+    // geometry frame is an earlier row. Deliver the newest figure first,
+    // then a later camera envelope so the pose is not left behind.
+    const list = Array.isArray(rows) ? rows : [];
+    let figureIndex = -1;
+    for (let index = list.length - 1; index >= 0; index -= 1) {
+      const item = list[index];
+      if (item && item.figure && item.figure.data) {
+        figureIndex = index;
+        break;
+      }
+    }
+    if (figureIndex < 0) return list.length ? [list[list.length - 1]] : [];
+    const payloads = [list[figureIndex]];
+    const latest = list[list.length - 1];
+    if (latest && latest !== list[figureIndex]) payloads.push(latest);
+    return payloads;
+  }
   function resyncScene(sceneId, attempt) {
     if (!window.fetch || !sceneId) return;
     attempt = Number(attempt || 0);
@@ -221,10 +241,10 @@
         const rows = (body && body.updates || []).filter(function (item) {
           return item && String(item.scene_id || "") === String(sceneId) && (item.figure || item.type === "view_update" || item.type === "render_error");
         });
-        const latest = rows.length ? rows[rows.length - 1] : null;
+        const payloads = sceneResyncPayloads(rows);
         const pending = !!(body && body.pending);
         if (body && body.terminal) return;
-        if (!latest || !window.MatterVisViewUpdates || typeof window.MatterVisViewUpdates.submit !== "function") {
+        if (!payloads.length || !window.MatterVisViewUpdates || typeof window.MatterVisViewUpdates.submit !== "function") {
           // Keep retrying while a render is pending, but cap the total wait so
           // a failed worker cannot leave an endless polling loop behind.
           if (attempt < 40 || (pending && attempt < 120)) {
@@ -239,13 +259,15 @@
         // change between the fetch and submit; calling the typed submitter
         // directly would drop that frame as "stale" with no retry, leaving
         // the newly selected canvas on the previous scene.
-        if (typeof window.__mvHandleFigurePayload === "function") {
-          window.__mvHandleFigurePayload(latest);
-        } else {
-          Promise.resolve(window.MatterVisViewUpdates.submit(latest)).catch(function (error) {
-            console.error("MatterVis scene resync failed", error);
-          });
-        }
+        payloads.forEach(function (payload) {
+          if (typeof window.__mvHandleFigurePayload === "function") {
+            window.__mvHandleFigurePayload(payload);
+          } else {
+            Promise.resolve(window.MatterVisViewUpdates.submit(payload)).catch(function (error) {
+              console.error("MatterVis scene resync failed", error);
+            });
+          }
+        });
       }).catch(function () {
         if (attempt < 40) setTimeout(function () { resyncScene(sceneId, attempt + 1); }, 250);
       });

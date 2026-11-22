@@ -40,6 +40,22 @@ through canonical loading, molecule grouping, PBC unwrapping, and scene
 construction. Omit them to retain the configured defaults. The CLI exposes the
 same controls as `--bond-scale` and repeatable `--bond-threshold Zn,N=2.5`.
 
+ASE-readable frames with an integer `molecule_index` array constrain
+MolCrysKit bond perception to each source group. Disconnected parts of a group
+may become separate components; sites from different groups are not merged.
+IDs may be non-contiguous, and the original per-atom array remains available
+in the bundle. Component membership and bond endpoints, including periodic
+image shifts, stay on that original frame. Frames without this array retain
+whole-frame bond perception. `identify_molecules` does not yet take that
+array. It does take `exclude_indices`, and the loader uses that on the
+full frame so bond endpoints stay MolCrysKit's frame indices. Slicing,
+and a rewrite of partition-local `atom_indices`, `bond_pairs`, and
+bond-record `left` / `right`, is only the fallback for an identifier
+with neither `exclude_indices` nor a partition parameter. Another
+bond-record field that still holds a slice-local index is rejected.
+If the identifier grows an explicit `molecule_indices` or
+`source_partitions` parameter, the loader forwards the array once.
+
 ### Auxiliary cells
 
 `agent.prepare_render` and `agent.render` accept `cell_overlays=[...]`.
@@ -107,15 +123,24 @@ Parses a CIF and returns a scene dict consumable by
   context images (the shell at fractional `-0.5`) are not drawn.
   With boundary replicas off, the same lattices stay on the wrapped sites
   and do not grow a bonded-image shell outside the cell.
-  Stick-capable styles (`ball_stick`, `stick`, `wireframe`, `ortep`) draw
+  Stick-capable styles (`ball_stick`, `stick`, `wireframe`, `ortep`,
+  `flat_illustration`) draw
   every MolCrysKit neighbor-list edge whose manifested length matches
   `BondRecord.distance`. `role` is `"covalent"` or `"coordination"` and is
   copied onto `scene["bonds"]`; Atomaestro does not reclassify elements to
   decide which contacts are sticks. A half-cell contact keeps the displayed
   centres instead of an ambiguous minimum-image end outside the cell.
   `scene["connectivity_regime"]` is `"molecular"` or `"extended"`, and
-  `scene["connectivity_rank"]` is the report's `max_rank`. Ball and
-  space-filling styles do not stroke the bond list. Coordination endpoints
+  `scene["connectivity_rank"]` is the report's `max_rank`. Ball,
+  space-filling, and `vdw` styles do not stroke the bond list. `ball` and
+  `space_filling` size those spheres from the compact display table
+  (`colors.ATOM_RADIUS`, carbon 0.18 Å before atom scale). `vdw` sizes them
+  from MolCrysKit's van der Waals table (Bondi for the usual organic
+  elements, carbon 1.70 Å) and is not an alias of either compact style.
+  Trace radii and camera bounds share `display_sphere_radius`: one table
+  read and one `atom_scale`, with no second 0.46 factor.
+  `flat_illustration` draws filled atoms and stroke bonds. It does not
+  select `material="flat"` or `shading="flat"`. Coordination endpoints
   in ball-and-stick use a sphere at least twice the bond-cylinder radius.
   `include_boundary_replicas=True` (the default) places each finite molecule
   so its anchor site lies in the home cell, then adds the near-face fragment
@@ -158,6 +183,8 @@ boolean is recorded in both `scene["show_hydrogen"]` and
 This is a display filter, not a change to source atoms or connectivity.
 `build_bundle_scene` retains its boolean `show_hydrogen=False` default and
 separate on/off scene-cache entries; it does not adopt omission semantics.
+Those entries are bounded (8 scenes / 64 MiB for the base map, 6 scenes /
+96 MiB after transforms). See `docs/redesign/caches.md`.
 
 `build_scene_from_atoms(..., include_minor=False)` and
 `build_bundle_scene(..., include_minor=False)` omit occupancy-minor disorder
@@ -303,7 +330,10 @@ honours:
 
 - `material` — `mesh` for real Mesh3d atoms/bonds, or `flat` for
   billboard-style traces.
-- `style` — `ball`, `ball_stick`, `stick`, `ortep`, or `wireframe`.
+- `style` — `ball`, `ball_stick`, `space_filling`, `stick`, `ortep`,
+  `wireframe`, `vdw`, or `flat_illustration`. `vdw` uses MolCrysKit van der
+  Waals radii. `ball` and `space_filling` use the compact display table.
+  `flat_illustration` does not set `material` to `flat`.
 - `scatter_atom_scale` — multiplier for fixed-pixel atom markers in the
   explicitly selected fast Scatter3d mode (default `0.45`).
 - `min_atom_radius` — optional Angstrom floor for rendered H/D atoms. When
@@ -414,7 +444,12 @@ pixels to remain in front of later depth tests.
 Entries in `scene["isosurfaces"]` may carry a `metadata` mapping in addition
 to `vertices`, `triangles`, `normals`, `color`, and `opacity`.  The mapping is
 preserved by the backend-neutral overlay adapter, so a renderer can opt into
-an analytic path without changing the public mesh schema.  The CPU renderer
+an analytic path without changing the public mesh schema.  Cube isosurface
+meshes store the shared shading record at `metadata["material"]`.
+`opacity` is the object alpha. The coefficient mapping copied to
+`metadata["surface_material"]` omits `opacity` and `light_scale`. The CPU
+surface shader evaluates that mapping, including Fresnel. See
+[Isosurface material](cube_api.md#isosurface-material). The CPU renderer
 currently recognises the following optional sphere keys:
 
 - `_raster_shape="sphere"`, `_raster_center`, and `_raster_radius` select the

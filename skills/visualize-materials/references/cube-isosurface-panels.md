@@ -15,13 +15,26 @@ isosurfaces, and any multi-panel comparison of scalar fields.
   contract across comparable panels.
 - State whether periodic scalar closure is enabled. If a surface is split across
   opposite boundaries, verify image placement before enabling closure.
+- Orbitals, electron density, and Hirshfeld surfaces use the default
+  `studio_soft` light. Do not switch them to `--lighting unlit` for a journal
+  figure; unlit is for color-critical NCI/IRI where shading can distort
+  sign(λ2)ρ. `studio_three_point` is not a CPU isosurface light.
 
 ## Required rendering workflow
 
-1. Render every cube as a separate MatterVis image.
-2. Set a common value with `--isovalue VALUE` for comparable fields. Use
-  `--isosurface-opacity VALUE` and `--periodic-isosurface` only when those
-  choices are scientifically intended.
+1. Render every journal panel with `mat-vis render --backend cpu`. That path
+   Taubin-smooths each phase (λ = 0.5, μ = −0.53, 15 iterations) at
+   `--isosurface-stride 1 --isosurface-smooth`. The default is stride 2
+   without Taubin. `mat-vis render --backend plotly`
+   can draw that same smoothed mesh but does not apply `--surface-material`.
+   `build_cube_figure` / `build_figure` rerun raw marching cubes and are not
+   publication quality.
+2. Set a common value with `--isovalue VALUE` for comparable fields. Smoothing
+   does not change that isovalue. Use `--isosurface-opacity VALUE` and
+   `--periodic-isosurface` only when those choices are scientifically intended.
+   `--surface-material hard_plastic`, `metal_like`, or `glass_like` is CPU-only.
+   Plotly and GPU reject those presets. `glass_like` is a Fresnel rim on the
+   CPU PNG, not on `build_cube_figure`.
 3. Static CLI output excludes interaction-only traces. Programmatic Plotly
   exports must pass `include_interaction_traces=False`; interactive HTML may
   retain `atom-selection`, `bond-selection`, and `disorder-preview-outline`.

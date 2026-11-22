@@ -1,12 +1,13 @@
 from __future__ import annotations
 # ruff: noqa: F401,F403,F405
 
+from .retention import ensure_budgeted_cache
+from ..style.bond_groups import bond_groups_cache_key
 from .common import *
 from .style import *
 from .traces_atoms import *
 from .traces_overlays import _minor_outline_traces
 from .serialize import _round_coord_arrays
-from ..style.bond_groups import bond_groups_cache_key
 from .style.resolver import apply_scene_style_overrides
 
 
@@ -79,7 +80,9 @@ def _atom_traces_for_partition(
     """Pick the right atom-trace builder for ``(material, style)`` and
     run it on ``sub_scene``. Used both by the default scene-style
     partition and by per-group material/style overrides."""
-    sty = str(sub_style.get("style", "ball_stick"))
+    sty = str(sub_style.get("style", "ball_stick")).lower().replace("-", "_")
+    if sty == "flat_illustration":
+        return _flat_illustration_atom_traces(sub_scene, sub_style)
     if sty == "wireframe":
         return _wireframe_atom_traces(sub_scene, sub_style)
     if sty == "ortep":
@@ -128,7 +131,8 @@ def _cached_atom_bond_meshes(scene: dict, style: dict, *, use_fast: bool):
     style["show_minor_only"] = False
     atom_groups = style.get("atom_groups") or []
     bond_groups = style.get("bond_groups") or []
-    cache = scene.setdefault("_mesh_trace_cache", {})
+    cache = ensure_budgeted_cache(scene.get("_mesh_trace_cache"), "mesh")
+    scene["_mesh_trace_cache"] = cache
     # mesh_lighting as a hashable tuple (or None) for caching.
     _ml = style.get("mesh_lighting")
     _ml_key = tuple(sorted(_ml.items())) if isinstance(_ml, dict) else None
@@ -184,6 +188,7 @@ def _cached_atom_bond_meshes(scene: dict, style: dict, *, use_fast: bool):
         _property_key,
     )
     if key in cache:
+        cache.touch(key)
         return cache[key]
 
     # Phase 4: bond_groups go through ``tag_bonds_with_groups`` BEFORE
@@ -280,8 +285,10 @@ def _cached_atom_bond_meshes(scene: dict, style: dict, *, use_fast: bool):
                 effective_bond_style = only_key[1]
             if effective_bond_style == "wireframe":
                 bond_traces = _wireframe_bond_traces(scene, style)
-            elif effective_bond_style == "ball":
+            elif effective_bond_style in {"ball", "space_filling", "vdw"}:
                 bond_traces = []
+            elif effective_bond_style == "flat_illustration":
+                bond_traces = _flat_illustration_bond_traces(scene, style)
             elif effective_bond_style == "ortep":
                 bond_traces = (
                     _bond_scatter_traces(scene, style)
@@ -308,15 +315,23 @@ def _cached_atom_bond_meshes(scene: dict, style: dict, *, use_fast: bool):
                     _round_coord_arrays(_trace_to_dict(tr)) for tr in minor_bonds
                 ],
             }
-            cache[key] = payload
+            cache.remember(key, payload)
             return payload
         finally:
             scene["draw_atoms"] = original_atoms
             if original_bonds is not None:
                 scene["bonds"] = original_bonds
 
-    if style.get("style") == "ball":
-        atom_traces = _atom_scatter_traces(scene, style) if use_fast else _atom_mesh_traces(scene, style)
+    scene_style = str(style.get("style", "ball_stick")).lower().replace("-", "_")
+    if scene_style == "flat_illustration":
+        atom_traces = _flat_illustration_atom_traces(scene, style)
+        bond_traces = _flat_illustration_bond_traces(scene, style)
+    elif scene_style in {"vdw", "space_filling", "ball"}:
+        # Sphere traces with no bonds. ``vdw`` keeps its own id; the radius
+        # lookup inside ``_style_atom_radius`` is what changes the size.
+        atom_traces = (
+            _atom_scatter_traces(scene, style) if use_fast else _atom_mesh_traces(scene, style)
+        )
         bond_traces = []
     elif style.get("style") == "wireframe":
         atom_traces = _wireframe_atom_traces(scene, style)
@@ -401,7 +416,7 @@ def _cached_atom_bond_meshes(scene: dict, style: dict, *, use_fast: bool):
             _round_coord_arrays(_trace_to_dict(tr)) for tr in minor_bonds
         ],
     }
-    cache[key] = payload
+    cache.remember(key, payload)
     if original_bonds is not None:
         scene["bonds"] = original_bonds
     return payload

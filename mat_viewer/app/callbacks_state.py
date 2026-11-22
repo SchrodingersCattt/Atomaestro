@@ -28,76 +28,18 @@ from .scene_controls import (
     _stamp_label_matches,
     _stamp_scene_matches,
     _stamp_scene_or_camera_differs,
+    _drop_acknowledged_pending,
+    _restore_pending_if_absent,
+    checklist_after_reconcile,
     claim_browser_scene,
     claim_poll_publish,
     filled_scene_id,
+    interaction_fence_children,
     note_interaction_epoch,
     remember_filled_scene,
     poll_request_is_stale,
     split_poll_fence,
 )
-
-
-def _drop_acknowledged_pending(backend, state) -> None:
-    """Drop a queued snapshot the tab callback is already delivering.
-
-    Duplicate arms ``pending_state`` and then selects the new tab. This
-    callback writes that scene's controls, including the rename box. Leaving
-    the snapshot queued makes the next poll write the same label again and
-    replace text the user has started typing. A snapshot that moved past the
-    state being delivered (a rename that landed mid-switch) stays queued.
-    """
-    with backend._lock:
-        pending = backend.pending_state
-        if not isinstance(pending, dict):
-            return
-        if str(pending.get("scene_id") or "") != str(state.get("scene_id") or ""):
-            return
-        if any(
-            int(pending.get(key, 0) or 0) > int(state.get(key, 0) or 0)
-            for key in _STATE_VERSION_KEYS
-        ):
-            return
-        backend.pending_state = None
-
-
-def _restore_pending_if_absent(backend, state) -> None:
-    """Put a snapshot back when a stale poll had already taken it.
-
-    A tab switch or a newer edit can land after the poll passed its first
-    check and popped the queue. A snapshot that arrived in that window
-    stays; only an empty queue is filled.
-    """
-    if not isinstance(state, dict):
-        return
-    with backend._lock:
-        if backend.pending_state is None:
-            backend.pending_state = state
-
-
-def checklist_after_reconcile(mode, reconciled, incoming):
-    """Checklist value after display options are reconciled.
-
-    Returns ``no_update`` when the control already shows that value, so
-    restoring a stored Cell boundary does not echo another ``capture_state``.
-    """
-    visible = visible_display_options(mode, reconciled)
-    if list(visible) == list(incoming or []):
-        return no_update
-    return visible
-
-
-def interaction_fence_children():
-    """Hidden stores for one browser's poll fence.
-
-    The epoch and client id travel with sidebar captures. The sink is the
-    acknowledgement output; it is not shown.
-    """
-    return (
-        dcc.Store(id="ui-interaction-epoch", data=0),
-        dcc.Store(id="ui-client-id", data=None),
-        html.Div(id="ui-interaction-sink", style={"display": "none"}),
-    )
 
 
 def register_state_callbacks(app, backend):
@@ -144,7 +86,7 @@ def register_state_callbacks(app, backend):
             *values,
             _scene_controls_stamp(state, values),
             state,
-            _camera_store_payload(scene_id, state.get("camera")),
+            _camera_store_for_state(state),
         )
 
     @app.callback(
@@ -417,15 +359,15 @@ def register_state_callbacks(app, backend):
                     active = wanted
                 else:
                     active = browser_scene if browser_scene in backend.scene_store.scenes else backend.active_scene_id()
-                return backend.scene_tabs(), [], active or no_update
+                return backend.scene_tabs(), backend.scene_tab_close_row(), active or no_update
 
         if not native_upload and isinstance(_scene_event, dict) and _scene_event.get("source") == "scene_catalog":
             decision, selected = backend.scene_catalog_selection(_scene_event, browser_scene)
             if decision in {"stale", "empty"}:
                 return no_update, no_update, no_update
             if decision == "keep":
-                return backend.scene_tabs(), [], no_update
-            return backend.scene_tabs(), [], selected
+                return backend.scene_tabs(), backend.scene_tab_close_row(), no_update
+            return backend.scene_tabs(), backend.scene_tab_close_row(), selected
 
         options = backend.scene_options()
         if not options:
@@ -441,7 +383,7 @@ def register_state_callbacks(app, backend):
                 active_id = wanted
         # Explicit event paths (CRUD / upload) own the active id and are the
         # only paths allowed to rebuild the tab subtree.
-        return backend.scene_tabs(), [], active_id
+        return backend.scene_tabs(), backend.scene_tab_close_row(), active_id
 
     @app.callback(
         Output("status-banner", "children", allow_duplicate=True),
@@ -490,7 +432,8 @@ def register_state_callbacks(app, backend):
         Output("property-colorbar-toggle", "value"),
         Output("scene-controls-scene", "children", allow_duplicate=True),
         Output("agent-state-store", "data"),
-        Output("camera-state-store", "data"),
+        # Duplicate like the other writers; a mixed primary drops Dash 2.18 events.
+        Output("camera-state-store", "data", allow_duplicate=True),
         Output("scene-switch-seq", "data"),
         Input("agent-state-poll", "n_intervals"),
         Input("native-upload-sync", "data"),
@@ -862,6 +805,10 @@ def register_state_callbacks(app, backend):
         if scene_id and scene_id not in backend.scene_store.scenes:
             return no_update, no_update, no_update
         filled = filled_scene_id(filled_controls_scene, client_id)
+        # The sidebar still belongs to another scene. One control's value in
+        # that case is the previous scene's widget, so it must not be stored
+        # on the selected scene. The tab callback records the filled scene
+        # before its refit; a click after that record is a normal capture.
         if filled and scene_id and str(scene_id) != str(filled):
             return no_update, no_update, no_update
         if scene_id:

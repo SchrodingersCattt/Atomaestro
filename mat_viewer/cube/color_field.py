@@ -12,6 +12,7 @@ from hashlib import sha256
 import numpy as np
 
 from .io import CubeData
+from .smooth import TAUBIN_ITERATIONS
 
 # Index slack for floating-point conversion at the color-grid boundary.
 COLOR_SAMPLE_INDEX_TOLERANCE = 1e-4
@@ -244,12 +245,21 @@ def isosurface_preparation_token(
     stride: int,
     ambient: float,
     diffuse: float,
+    specular: float = 0.0,
+    shininess: float = 32.0,
     color_cube: CubeData | None,
     color_range: tuple[float, float] | None,
     color_center: float | None,
     colormap: str,
+    smooth: bool = False,
+    smooth_iterations: int = TAUBIN_ITERATIONS,
 ) -> str:
-    """Identity of one prepared isosurface, including the color grid."""
+    """Identity of one prepared isosurface, including the color grid.
+
+    ``smooth`` defaults to false. Omitting it is the raw marching-cubes
+    mesh. Pass ``smooth=True`` for the Taubin publication mesh. When
+    smoothing is off, the iteration count is not part of the identity.
+    """
     payload = (
         _grid_digest(cube),
         None if color_cube is None else _grid_digest(color_cube),
@@ -260,6 +270,10 @@ def isosurface_preparation_token(
         int(stride),
         float(ambient),
         float(diffuse),
+        float(specular),
+        float(shininess),
+        bool(smooth),
+        int(smooth_iterations) if smooth else 0,
         None
         if color_range is None
         else (float(color_range[0]), float(color_range[1])),

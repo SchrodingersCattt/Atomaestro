@@ -90,8 +90,9 @@ const fence = sandbox.window.__mvFenceTest;
   gd.__mvSceneCameraOwner = 'canvas-b';
   await plot.relayout(gd, {'scene.camera': {eye: {x: 9, y: 9, z: 9}}});
   assert.equal(calls.length, 1, 'owned canvas camera was not restored');
-  assert.equal(calls[0]['scene.camera'].eye.x, 0);
-  assert.equal(calls[0]['scene.camera'].eye.y, 1);
+  assert.equal(calls[0]['scene.camera'], undefined, 'owned camera was restored as a whole scene.camera object');
+  assert.equal(calls[0]['scene.camera.eye'].x, 0);
+  assert.equal(calls[0]['scene.camera.eye'].y, 1);
 
   sandbox.window.__mvGestureSceneId = 'scene-a';
   sandbox.window.__mvGestureSceneGeneration = 1;
@@ -285,6 +286,43 @@ const fence = sandbox.window.__mvFenceTest;
   delete gd.__mvCameraRevision;
   delete gd.__mvCameraRevisionScope;
   delete gd.__mvCameraRevisionEpoch;
+  displayedCamera = null;
+
+  // A figure react that started before pointer-up captured the pre-drag
+  // camera. When it finishes after the button is up, the sampled eye
+  // still has to come back. A react that starts after pointer-up does not.
+  sandbox.window.__mvRetireDragSample();
+  gd.layout.meta.mattervis_render.scene_generation = 7;
+  gd.layout.meta.mattervis_render.server_started_at = 'epoch';
+  sandbox.window.__mvGestureEndedAt = 0;
+  sandbox.window.__mvGestureSceneId = 'canvas-b';
+  sandbox.window.__mvGestureSceneGeneration = 7;
+  sandbox.window.__mvGestureServerEpoch = 'epoch';
+  sandbox.window.__mvGestureCameraRevision = 1;
+  gd.__mvFrameReactStartedAt = Date.now() - 50;
+  gd.__mvExternalRelayouts = 4;
+  gd.__mvGestureExternalRelayouts = 4;
+  displayedCamera = {current: dragged};
+  sandbox.window.__mvNoteInProgressDrag(gd);
+  sandbox.window.__mvGestureEndedAt = Date.now();
+  displayedCamera = {current: committed};
+  calls.length = 0;
+  await sandbox.window.__mvRestoreInProgressDrag(gd);
+  assert.equal(restoredDrag(calls), true, 'a frame that started before pointer-up snapped the orbit back');
+  gd.__mvFrameReactStartedAt = Date.now() - 50;
+  gd.__mvGestureExternalRelayouts = 1;
+  gd.__mvExternalRelayouts = 2;
+  calls.length = 0;
+  await sandbox.window.__mvRestoreInProgressDrag(gd);
+  assert.equal(restoredDrag(calls), false, 'a later relayout kept the sampled orbit');
+  delete gd.__mvGestureExternalRelayouts;
+  delete gd.__mvExternalRelayouts;
+  gd.__mvFrameReactStartedAt = Date.now();
+  calls.length = 0;
+  await sandbox.window.__mvRestoreInProgressDrag(gd);
+  assert.equal(restoredDrag(calls), false, 'a frame that started after pointer-up restored the finished drag');
+  delete gd.__mvFrameReactStartedAt;
+  sandbox.window.__mvRetireDragSample();
   displayedCamera = null;
 
   sandbox.window.__mvGestureSceneId = 'scene-a';

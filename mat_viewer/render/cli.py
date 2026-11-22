@@ -18,7 +18,16 @@ from .cli_controls import (
 from .frame_selection import parse_frame_indices as _parse_frame_indices
 
 _DISPLAY_MODES = ("auto", "formula_unit", "unit_cell", "asymmetric_unit", "cluster")
-_STYLES = ("ball_stick", "ball", "space_filling", "stick", "ortep", "wireframe")
+_STYLES = (
+    "ball_stick",
+    "ball",
+    "space_filling",
+    "stick",
+    "ortep",
+    "wireframe",
+    "vdw",
+    "flat_illustration",
+)
 _SHADINGS = ("smooth", "flat")
 _ORTEP_MODES = ("ortep_solid", "ortep_axes", "ortep_octant", "ortep_hatch")
 _IMAGE_EXTENSIONS = (".png", ".pdf", ".svg")
@@ -124,6 +133,51 @@ def _build_render_parser(
         choices=_SHADINGS,
         default="smooth",
         help="Surface shading for mesh geometry (default: smooth).",
+    )
+
+    def _lighting_argument(value: str) -> str:
+        from .lighting import get_lighting_rig
+
+        try:
+            return get_lighting_rig(value).id
+        except (TypeError, ValueError) as exc:
+            raise argparse.ArgumentTypeError(str(exc)) from exc
+
+    p.add_argument(
+        "--lighting",
+        default="studio_soft",
+        metavar="RIG",
+        type=_lighting_argument,
+        help=(
+            "CPU lighting rig (default: studio_soft). "
+            "studio_soft is the current camera-space light and is not retuned. "
+            "unlit disables CPU shading. "
+            "studio_three_point is rejected on CPU instead of substituting "
+            "studio_soft. A surface-material preset does not select this rig, "
+            "and this flag is not an alias of --publication-style."
+        ),
+    )
+
+    def _surface_material_argument(value: str) -> str:
+        from .surface_material import get_surface_material
+
+        try:
+            return get_surface_material(value).id
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(str(exc)) from exc
+
+    p.add_argument(
+        "--surface-material",
+        default=None,
+        metavar="PRESET",
+        type=_surface_material_argument,
+        help=(
+            "CPU Blinn-Phong preset: matte, hard_plastic, metal_like, or glass_like. "
+            "Not --shading smooth|flat, which is the mesh/flat draw technique. "
+            "metal and glass are rejected. Specular presets and glass_like with "
+            "--backend plotly or gpu are rejected. "
+            "--renderer batch with those presets errors; auto uses general."
+        ),
     )
 
     # Projection
@@ -709,7 +763,7 @@ def _prepare_frame(bundle, args: argparse.Namespace, overrides: dict[str, Any]):
         show_hydrogen=args.show_hydrogen,
         include_boundary_replicas=include_boundary_replicas,
         include_cross_boundary_bond_endpoints=(
-            args.style not in {"ball", "space_filling"}
+            args.style not in {"ball", "space_filling", "vdw"}
         ),
     )
     _apply_camera_overrides(scene, overrides, args)

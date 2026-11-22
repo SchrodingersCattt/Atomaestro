@@ -41,7 +41,19 @@ from .mesh_overlays import isosurface_primitives as _isosurface_primitives
 from .mesh_overlays import polyhedron_primitives as _polyhedron_primitives
 from .property_planning import prepare_render_property, property_color_for_atom, reserve_property_colorbar, resolve_render_property_context
 from ..style.disorder import bond_effective_opacity
-from .radius import atom_visual_radius, clamp_displacement_radius, hydrogen_radius_floor
+from .lighting import note_plan_lighting
+from .radius import (
+    clamp_displacement_radius,
+    hydrogen_radius_floor,
+    rendered_atom_radius,
+)
+from .representations import (
+    REPRESENTATIONS,
+    SPHERE_ONLY_REPRESENTATIONS,
+    bond_stroke_for,
+    illustration_sphere_metadata,
+)
+from .surface_material import attach_surface_material
 
 
 def prepare_render(
@@ -73,7 +85,7 @@ def prepare_render(
         show_hydrogen=render_spec.show_hydrogen,
         include_boundary_replicas=view_spec.include_boundary_replicas,
         include_cross_boundary_bond_endpoints=(
-            render_spec.representation not in {"ball", "space_filling"}
+            render_spec.representation not in SPHERE_ONLY_REPRESENTATIONS
         ),
     )
     attach_cell_overlays(scene, cell_overlays)
@@ -111,14 +123,7 @@ def prepare_render(
     display_atoms_by_source: dict[int, dict[tuple[Any, ...], int]] = {}
     atom_representations: dict[int, str] = {}
     default_representation = str(render_spec.representation).lower().replace("-", "_")
-    supported_representations = {
-        "ball",
-        "ball_stick",
-        "ortep",
-        "space_filling",
-        "stick",
-        "wireframe",
-    }
+    supported_representations = REPRESENTATIONS
     lat_steps, lon_steps = render_spec.sphere_detail
     ortep_view_direction = (
         np.asarray(camera_spec.position) - np.asarray(camera_spec.target)
@@ -301,6 +306,11 @@ def prepare_render(
                     min_atom_radius=render_spec.min_atom_radius,
                 )
             )
+            sphere_metadata = (
+                illustration_sphere_metadata(metadata)
+                if representation == "flat_illustration"
+                else metadata
+            )
             primitives.append(
                 sphere_primitive(
                     semantic_id,
@@ -310,7 +320,7 @@ def prepare_render(
                     lat_steps=lat_steps,
                     lon_steps=lon_steps,
                     alpha=alpha,
-                    metadata=metadata,
+                    metadata=sphere_metadata,
                 )
             )
         elif representation == "stick":
@@ -399,17 +409,11 @@ def prepare_render(
             else:
                 first_representation = atom_representations[first_index]
                 second_representation = atom_representations[second_index]
-                bond_capable = {"ball_stick", "ortep", "stick", "wireframe"}
-                if (
-                    first_representation not in bond_capable
-                    or second_representation not in bond_capable
-                ):
-                    continue
-                bond_representation = (
-                    "wireframe"
-                    if first_representation == second_representation == "wireframe"
-                    else "stick"
+                bond_representation = bond_stroke_for(
+                    first_representation, second_representation
                 )
+                if bond_representation is None:
+                    continue
             start = np.asarray(
                 _value(bond, "start", default=atom_positions[first_index]), dtype=float
             )
@@ -462,7 +466,7 @@ def prepare_render(
                     _value(bond, "right_image_shift", default=(0, 0, 0))
                 ),
             }
-            if bond_representation == "wireframe":
+            if bond_representation in {"wireframe", "flat_illustration"}:
                 primitives.extend(
                     bond_line_primitives(
                         semantic_id,
@@ -558,9 +562,8 @@ def prepare_render(
     isosurface_primitives, isosurface_warnings = _isosurface_primitives(scene, render_spec=render_spec)
     primitives.extend(isosurface_primitives)
     warnings.extend(isosurface_warnings)
-    primitives.extend(
-        vector_primitives(scene.get("vector_overlays"), lattice=scene.get("matrix"))
-    )
+    primitives.extend(vector_primitives(scene.get("vector_overlays"), lattice=scene.get("matrix")))
+    primitives = attach_surface_material(primitives, render_spec.surface_material)
     if render_spec.shading == "flat":
         primitives = [
             (
@@ -606,6 +609,9 @@ def prepare_render(
         "bond_groups": [dict(group) for group in (bond_groups or ())],
         "atom_property_color": property_metadata_payload,
     }
+    note_plan_lighting(
+        metadata, backend=render_spec.backend, lighting=render_spec.lighting
+    )
     if render_spec.show_axes:
         attach_lattice_compass_metadata(metadata, warnings, lattice)
     return RenderPlan(
@@ -1273,19 +1279,15 @@ def _atom_radius(
     bond_radius: float | None = None,
     min_atom_radius: float | None = None,
 ) -> float:
-    value = float(_value(atom, "atom_radius", "radius", default=0.5))
-    rendered = atom_visual_radius(
-        value,
+    return rendered_atom_radius(
         element=str(_value(atom, "symbol", "elem", "element", default="C")),
+        stored_radius=float(_value(atom, "atom_radius", "radius", default=0.5)),
         representation=representation,
         atom_scale=atom_scale,
         bond_radius=bond_radius,
         min_atom_radius=min_atom_radius,
-        coordination=str(representation).lower().replace("-", "_") == "ball_stick" and bool(_value(atom, "_coordination_site", default=False)),
+        coordination=bool(_value(atom, "_coordination_site", default=False)),
     )
-    if representation in {"space_filling", "ball"}:
-        return max(rendered, 0.2)
-    return max(rendered, 0.16)
 
 def _displacement_matrix(atom: Any) -> np.ndarray | None:
     value = _value(atom, "u_cart_A2", "u_cart", "Ucart", "U", "uij_cart", default=None)

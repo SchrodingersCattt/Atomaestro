@@ -21,7 +21,10 @@ from ..contracts import (
     ViewportPlan,
 )
 from ..compass_overlay import draw_matplotlib_compass
+from ..isosurface_material import cpu_surface_from_metadata
+from ..lighting import STUDIO_SOFT_DIRECTION, lighting_id_for_cpu
 from ..property_colorbar import draw_matplotlib_colorbar
+from ..surface_material import shade_blinn_phong
 from .bsp import BSPPolygon, build_bsp, traverse_back_to_front
 from .raster_lines import _clipped_endpoint_rgb, endpoint_screen_weight
 from .visibility import anchor_occluded, projected_polygon_depth
@@ -145,6 +148,7 @@ def render_vector(
     ).lower()
     if output_format not in {"svg", "pdf"}:
         raise ValueError("vector format must be svg or pdf")
+    lighting = lighting_id_for_cpu(plan.metadata)
     if int(dpi) <= 0:
         raise ValueError("dpi must be positive")
 
@@ -191,7 +195,9 @@ def render_vector(
             axes.set_ylim(float(local_height), 0.0)
             axes.set_aspect("equal", adjustable="box")
             axes.axis("off")
-            polygons, pieces = vector_scene(viewport, local_width, local_height)
+            polygons, pieces = vector_scene(
+                viewport, local_width, local_height, lighting=lighting
+            )
             buckets: dict[int, list[VectorLinePiece]] = {}
             for piece in pieces:
                 buckets.setdefault(piece.insertion_index, []).append(piece)
@@ -270,10 +276,12 @@ def vector_scene(
     viewport: ViewportPlan,
     width: int,
     height: int,
+    *,
+    lighting: str = "studio_soft",
 ) -> tuple[list[ProjectedPolygon], list[VectorLinePiece]]:
     """Return BSP-ordered polygons and visibility-split line pieces."""
     transform = CameraTransform(viewport.camera, width, height)
-    bsp_polygons = _mesh_polygons(viewport, transform)
+    bsp_polygons = _mesh_polygons(viewport, transform, lighting=lighting)
     tree = build_bsp(bsp_polygons, epsilon=_scene_epsilon(bsp_polygons))
     if viewport.camera.projection == "orthographic":
         ordered = traverse_back_to_front(
@@ -299,10 +307,13 @@ def visible_line_segments(
 def _mesh_polygons(
     viewport: ViewportPlan,
     transform: CameraTransform,
+    *,
+    lighting: str = "studio_soft",
 ) -> list[BSPPolygon]:
     result: list[BSPPolygon] = []
     rotation = transform.view_matrix[:3, :3]
-    light = np.asarray([-0.32, 0.42, 1.0])
+    unlit = lighting == "unlit"
+    light = np.asarray(STUDIO_SOFT_DIRECTION, dtype=float)
     light /= np.linalg.norm(light)
     meshes = sorted(
         (
@@ -317,6 +328,10 @@ def _mesh_polygons(
         material = primitive.metadata.get("material", {})
         ambient = float(material.get("ambient", 0.68))
         diffuse = float(material.get("diffuse", 0.32))
+        surface = cpu_surface_from_metadata(primitive.metadata)
+        if surface is not None and surface.specular <= 0.0:
+            ambient = float(surface.ambient)
+            diffuse = float(surface.diffuse)
         for triangle_index, indices in enumerate(primitive.triangles):
             world_triangle = primitive.vertices[indices]
             normal = np.cross(
@@ -335,17 +350,31 @@ def _mesh_polygons(
                 averaged_length = float(np.linalg.norm(averaged))
                 if averaged_length > 1e-14:
                     shading_normal = rotation @ (averaged / averaged_length)
-            illumination = ambient + diffuse * abs(float(shading_normal @ light))
+            if unlit:
+                illumination = 1.0
+            else:
+                illumination = ambient + diffuse * abs(float(shading_normal @ light))
             if primitive.vertex_colors is None:
                 base_rgb = primitive.rgba[:3]
             else:
                 base_rgb = np.mean(primitive.vertex_colors[indices], axis=0)
-            rgba = (
-                float(base_rgb[0]) * illumination,
-                float(base_rgb[1]) * illumination,
-                float(base_rgb[2]) * illumination,
-                float(primitive.rgba[3]),
-            )
+            if not unlit and surface is not None and surface.specular > 0.0:
+                shaded = shade_blinn_phong(
+                    np.asarray(base_rgb, dtype=float), shading_normal, surface
+                )
+                rgba = (
+                    float(np.clip(shaded[0], 0.0, 1.0)),
+                    float(np.clip(shaded[1], 0.0, 1.0)),
+                    float(np.clip(shaded[2], 0.0, 1.0)),
+                    float(primitive.rgba[3]),
+                )
+            else:
+                rgba = (
+                    float(base_rgb[0]) * illumination,
+                    float(base_rgb[1]) * illumination,
+                    float(base_rgb[2]) * illumination,
+                    float(primitive.rgba[3]),
+                )
             clipped = transform.clip_polygon_camera(camera_vertices[indices])
             for fragment_index, triangle in enumerate(triangulate_polygon(clipped)):
                 result.append(

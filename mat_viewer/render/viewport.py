@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .radius import atom_visual_radius
+from .radius import cover_axis_ranges, display_atom_radii, display_sphere_radius
 from .viewport_spec import ViewportSpec, resolve_viewport, reuse_viewport  # noqa: F401
 
 
@@ -42,28 +42,13 @@ def _geometry_entity_points(scene: dict) -> list[np.ndarray]:
 
 
 def _display_atom_radii(atoms: list[dict], style: Mapping[str, object]) -> np.ndarray:
-    """Return radii used by both traces and viewport fitting."""
-    atom_scale = float(style.get("atom_scale", 1.0))
-    values = []
-    for atom in atoms:
-        raw = max(float(atom.get("atom_radius", 0.18)), 0.05)
-        element = str(atom.get("elem") or atom.get("symbol") or "C")
-        representation = str(style.get("style", "ball")).lower().replace("-", "_")
-        values.append(
-            atom_visual_radius(
-                raw,
-                element=element,
-                representation="ball",
-                atom_scale=atom_scale,
-                style=style,
-                bond_radius=style.get("bond_radius"),
-                coordination=(
-                    representation == "ball_stick"
-                    and bool(atom.get("_coordination_site"))
-                ),
-            )
-        )
-    return np.asarray(values, dtype=float)
+    """Return radii used by viewport fitting.
+
+    Van der Waals spheres and coordination floors come from
+    :func:`display_atom_radii`, the same helper the uniform viewport and
+    the oblique camera fit use.
+    """
+    return display_atom_radii(atoms, style)
 
 
 @dataclass
@@ -271,6 +256,22 @@ def _range_aspect_ratio(xr, yr, zr) -> dict | None:
         return None
     scaled = spans / float(spans.max())
     return {"x": float(scaled[0]), "y": float(scaled[1]), "z": float(scaled[2])}
+
+
+def scaled_scene_aspect(aspectratio, style: dict | None):
+    """Uniform Fit zoom. Reset and a missing scale leave the range aspect."""
+
+    if not isinstance(aspectratio, Mapping):
+        return None
+    if not style:
+        return {axis: float(aspectratio[axis]) for axis in ("x", "y", "z")}
+    try:
+        scale = float(style.get("camera_aspect_scale") or 1.0)
+    except (TypeError, ValueError):
+        scale = 1.0
+    if not math.isfinite(scale) or scale <= 0.0:
+        scale = 1.0
+    return {axis: float(aspectratio[axis]) * scale for axis in ("x", "y", "z")}
 
 
 def flat_projected_pixel_scale(scene: dict, style: dict, *, ranges=None) -> float:
@@ -764,6 +765,10 @@ def _auto_camera_fit_ranges(
         "focal_point",
     }.issubset(explicit):
         return ranges
+    # An eye is the camera Plotly is painting. A dict that also still
+    # carries the legacy position and focal point must not grow the box.
+    if "eye" in explicit:
+        return ranges
 
     projection = explicit.get("projection")
     if isinstance(projection, dict):
@@ -772,7 +777,17 @@ def _auto_camera_fit_ranges(
         "orthographic",
         "ortho",
     }:
-        return ranges
+        # Orthographic views skip the perspective corner expansion below.
+        # They still have to contain the drawn spheres. ``cover_axis_ranges``
+        # is a no-op when the incoming box already does.
+        return cover_axis_ranges(
+            ranges,
+            _visible_atoms(scene, style),
+            representation=str(style.get("style", "ball_stick")),
+            atom_scale=float(style.get("atom_scale", 1.0)),
+            bond_radius=float(style.get("bond_radius", 0.15)),
+            min_atom_radius=style.get("min_atom_radius"),
+        )
 
     try:
         spans = np.asarray(
@@ -797,11 +812,12 @@ def _auto_camera_fit_ranges(
         points: list[np.ndarray] = []
         atoms = _visible_atoms(scene, style)
         if atoms:
-            atom_scale = float(style.get("atom_scale", 1.0))
             for atom in atoms:
                 try:
                     cart = np.asarray(atom.get("cart"), dtype=float)
-                    radius = max(float(atom.get("atom_radius", 0.18)), 0.05) * atom_scale
+                    radius = display_sphere_radius(
+                        atom, style, minimum_stored_radius=0.05
+                    )
                 except (TypeError, ValueError):
                     continue
                 if cart.shape != (3,) or not np.all(np.isfinite(cart)):
@@ -925,13 +941,16 @@ def figure_axis_layout(
         xr, yr, zr = viewport.ranges
         aspect_kwargs = {"aspectmode": viewport.aspectmode}
         if viewport.aspectratio is not None:
-            aspect_kwargs["aspectratio"] = dict(viewport.aspectratio)
+            aspect_kwargs["aspectratio"] = scaled_scene_aspect(viewport.aspectratio, style)
     else:
         if xr is None or yr is None or zr is None:
             raise TypeError("figure_axis_layout requires ranges or a viewport")
         aspect = _range_aspect_ratio(xr, yr, zr)
         if aspect is not None:
-            aspect_kwargs = {"aspectmode": "manual", "aspectratio": aspect}
+            aspect_kwargs = {
+                "aspectmode": "manual",
+                "aspectratio": scaled_scene_aspect(aspect, style),
+            }
         else:
             aspect_kwargs = {"aspectmode": "data"}
 
@@ -948,6 +967,7 @@ def figure_axis_layout(
         "ticks": "",
         "zeroline": False,
         "zerolinewidth": 0,
+        "autorange": False,
         "title": {"text": ""},
     }
     return {

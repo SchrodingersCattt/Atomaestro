@@ -158,6 +158,62 @@ def test_same_revision_frame_paints_the_acknowledged_camera_not_the_baked_pose()
 """)
 
 
+def test_post_react_restore_keeps_the_acknowledged_orbit_not_the_pre_drag_command():
+    """The FIFO restore runs after the stored pose is put back.
+
+    ``__mvLatestCamera`` is the last ``applyAsync`` snapshot. A drag does
+    not write it, so it can still be the Reset from before that drag.
+    The geometry body is camera revision 0 and the graph clock is 1, so
+    the post-react hook treats the body as stale and would call
+    ``applyAsync`` with that Reset. The painted eye has to stay the orbit.
+    A command whose revision is newer than the book still applies.
+    """
+    _run_node(r"""
+  const h = harness({
+    scene_id: 'scene-nacl', scene_generation: 5, render_revision: 1,
+    camera_revision: 1, server_started_at: 'epoch',
+  });
+  h.gd.layout = h.frame({
+    scene_id: 'scene-water', scene_generation: 4, render_revision: 0, camera_revision: 0,
+  }, camera('perspective', 2));
+  h.gd.data = [{type: 'scatter3d', x: [0]}];
+  h.gd.__mvCameraRevision = 1;
+  h.gd.__mvCameraRevisionScope = 'scene-nacl:5';
+  h.gd.__mvCameraRevisionScene = 'scene-nacl';
+  h.gd.__mvCameraRevisionEpoch = 'epoch';
+  const reset = camera('perspective', 1);
+  const orbit = camera('perspective', 4);
+  h.gd.__mvLatestCamera = {snapshot: reset, patch: {}, replayed: false, command: 'reset'};
+  h.root.__mvServerCameraByScene = {
+    'scene-nacl': {
+      camera: orbit, camera_revision: 1, scene_generation: 5, server_started_at: 'epoch',
+    },
+  };
+  h.expect({
+    scene_id: 'scene-nacl', scene_generation: 5, render_revision: 1,
+    camera_revision: 1, server_started_at: 'epoch',
+  });
+  const body = h.frame({
+    scene_id: 'scene-nacl', scene_generation: 5, render_revision: 1,
+    camera_revision: 0, server_started_at: 'epoch',
+  }, reset);
+  await h.submitFrame(body, 'positional');
+  assert.equal(h.gd.layout.meta.mattervis_render.scene_id, 'scene-nacl');
+  assert.equal(h.live().eye.x, 4, 'post-react restore painted the pre-drag Reset over the orbit');
+  h.gd.layout.meta.mattervis_render.scene_id = 'scene-water';
+  h.gd.layout.meta.mattervis_render.scene_generation = 4;
+  h.gd.__mvCameraRevision = 2;
+  h.gd.__mvLatestCamera = {snapshot: camera('perspective', 9), patch: {}, replayed: false, command: 'fit'};
+  const newer = h.frame({
+    scene_id: 'scene-nacl', scene_generation: 5, render_revision: 2,
+    camera_revision: 0, server_started_at: 'epoch',
+  }, reset);
+  newer.scene.uirevision = 'scene-nacl__2__viewport';
+  await h.submitFrame(newer, 'positional');
+  assert.equal(h.live().eye.x, 9, 'a newer camera command was left behind the geometry body');
+""")
+
+
 def test_in_progress_drag_is_not_replaced_by_the_stored_camera():
     _run_node(r"""
   const h = harness();

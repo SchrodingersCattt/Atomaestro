@@ -31,6 +31,13 @@
       latestCameraRevision = Object.create(null);
       latestVersions = Object.create(null);
       parkedCameraByScene = Object.create(null);
+      var book = root.__mvServerCameraByScene;
+      if (book) {
+        Object.keys(book).forEach(function (id) {
+          var entry = book[id];
+          if (!entry || !entry.server_started_at || String(entry.server_started_at) !== epoch) delete book[id];
+        });
+      }
       root.__mv_view_diag.epochResets = (root.__mv_view_diag.epochResets || 0) + 1;
     }
     root.__mvServerEpoch = epoch;
@@ -108,6 +115,46 @@
     var revision = cameraRevision(update);
     var latest = latestCameraRevision[scope];
     return latest === undefined || revision >= latest;
+  }
+  function cameraPoint(value) {
+    if (!value) return null;
+    if (Array.isArray(value)) return [Number(value[0]), Number(value[1]), Number(value[2])];
+    return [Number(value.x), Number(value.y), Number(value.z)];
+  }
+  function cameraPointsDiffer(left, right) {
+    var a = cameraPoint(left);
+    var b = cameraPoint(right);
+    if (!a || !b) return false;
+    for (var index = 0; index < 3; index += 1) {
+      if (!Number.isFinite(a[index]) || !Number.isFinite(b[index])) return false;
+      if (Math.abs(a[index] - b[index]) > 1e-6) return true;
+    }
+    return false;
+  }
+  function storedPoseOwnsRevision(snapshot, revision) {
+    /* A drag writes the scene book and the server camera without a new
+     * journal row and without a new camera revision. The journal row that
+     * is still newest is the command from before that drag. Replaying it
+     * after the geometry frame paints the command's eye back over the drag. */
+    var book = root.__mvServerCameraByScene;
+    var sceneId = snapshot && snapshot.scene_id ? String(snapshot.scene_id) : "";
+    var saved = book && sceneId ? book[sceneId] : null;
+    if (!saved || !saved.camera) return false;
+    if (Number(saved.camera_revision) !== Number(revision)) return false;
+    var savedEpoch = saved.server_started_at;
+    var incomingEpoch = snapshot.server_started_at;
+    if (present(savedEpoch) && present(incomingEpoch) && String(savedEpoch) !== String(incomingEpoch)) return false;
+    if (present(root.__mvServerEpoch) && root.__mv_view_diag.epochResets &&
+        (!present(savedEpoch) || String(savedEpoch) !== String(root.__mvServerEpoch))) return false;
+    var generation = generationOf(snapshot, graph());
+    if (present(saved.scene_generation) && present(generation) &&
+        String(saved.scene_generation) !== String(generation)) return false;
+    var incoming = snapshot.payload && snapshot.payload.camera ? snapshot.payload : snapshot;
+    var pose = incoming && incoming.camera;
+    if (!pose) return false;
+    return cameraPointsDiffer(saved.camera.eye, pose.eye) ||
+      cameraPointsDiffer(saved.camera.center, pose.center) ||
+      cameraPointsDiffer(saved.camera.up, pose.up);
   }
   function updateKind(update) {
     return String((update && (update.update_kind || update.kind)) || "");
@@ -445,6 +492,11 @@
         root.__mv_view_diag.cameraMissingPayload += 1;
         root.__mv_view_diag.lastCameraMissingPayload = {key: cameraKey, revision: revision, scene: snapshot.scene_id};
         return "camera-missing";
+      }
+      if (storedPoseOwnsRevision(snapshot, revision)) {
+        markDelivered(snapshot, gd, cameraKey);
+        root.__mv_view_diag.cameraKept = (root.__mv_view_diag.cameraKept || 0) + 1;
+        return "camera";
       }
       root.__mv_camera_diag = root.__mv_camera_diag || {};
       root.__mv_camera_diag.lastApply = {

@@ -111,6 +111,37 @@ the response is `pending` until a new figure is built. The resync applies
 the figure first, then the later camera envelope. A camera envelope alone
 cannot paint a canvas that is still showing another scene, so the browser
 keeps reading the scene journal until a figure arrives.
+That geometry body can carry an older camera revision than the pose already
+acknowledged for the scene. While the canvas shows another scene, the body
+still replaces the traces. The camera clock remembered on the graph from
+the previous visit does not reject it. The acknowledged pose is applied
+after those traces are current. The geometry frame's own camera relayout
+is not stored as that pose. On the scene that is already painted, an
+older camera revision still does not replace a newer pose. A camera
+envelope at the same revision is not applied when `camera-state-store`
+already holds a different eye, center, or up for that scene and
+generation. That stored pose is the drag. The envelope is the command
+published before the drag, and applying it would write the command's
+eye back onto the server. A later command still applies because it
+advances `camera_revision`. The book entry carries
+`server_started_at`. A restarted session reuses the scene id,
+generation, and revision, and that older book does not hide the new
+session's command. The post-react restore uses the same rule. It
+reapplies `__mvLatestCamera` only when that snapshot is still the
+acknowledged pose. A drag does not write `__mvLatestCamera`, so the
+command from before the drag must not replace the orbit the book just
+painted. A command newer than the book still applies. The geometry
+frame's camera relayout is not a drag. Capture rejects that relayout,
+and a server pose restore, while they are in flight and when the
+relayout eye is the programmatic stamp. A wheel that is already in
+progress does not adopt that eye. The canvas id is not a gesture, and
+a projection change is not a pose. A relayout is stored for a live
+pointer, a wheel whose gesture names the mounted scene, or a pointer
+follow-up that still names that scene and is inside the 1000ms release
+after pointerup or pointercancel. That follow-up can be more than one
+pose. The offscreen drag is one of them. `window.__mvCaptureDiag.reason`
+records the decision. A camera revision does not by itself put the
+server checklist back over an in-flight unit-cell edit.
 
 For local baseline measurements, `window.__mv_view_diag` reports submissions,
 full frames, local patches, camera updates, and stale drops.

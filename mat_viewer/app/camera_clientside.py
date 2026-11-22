@@ -43,6 +43,31 @@ def register_camera_clientside(app) -> None:
           }
           if (!touches) return window.dash_clientside.no_update;
           var gd = document.querySelector("#crystal-graph .js-plotly-plot");
+          if (Number(window.__mvProgrammaticCameraDepth || 0) > 0) return window.dash_clientside.no_update;
+          if (gd && (Number(gd.__mvInsideFrameReact || 0) > 0 || gd.__mvApplyingServerCamera ||
+              gd.__mvRestoringDrag || Number(gd.__mvOwnedRelayoutDepth || 0) > 0)) {
+            return window.dash_clientside.no_update;
+          }
+          var stamp = window.__mvProgrammaticCameraStamp;
+          var stampedEye = stamp && stamp.eye;
+          var relayoutEye = relayout["scene.camera.eye"] ||
+            (relayout["scene.camera"] && relayout["scene.camera"].eye) ||
+            (relayout.scene && relayout.scene.camera && relayout.scene.camera.eye);
+          function eyeNear(left, right) {
+            if (!left || !right) return false;
+            var names = ["x", "y", "z"];
+            for (var n = 0; n < names.length; n++) {
+              var a = Number(left[names[n]] !== undefined ? left[names[n]] : left[n]);
+              var b = Number(right[names[n]] !== undefined ? right[names[n]] : right[n]);
+              if (!Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a - b) > 1e-4) return false;
+            }
+            return true;
+          }
+          var wheelPose = window.__mvUnadoptedWheel && window.__mvUnadoptedWheel.camera;
+          if (stampedEye && relayoutEye && eyeNear(relayoutEye, stampedEye) &&
+              !(wheelPose && eyeNear(relayoutEye, wheelPose.eye))) {
+            return window.dash_clientside.no_update;
+          }
           var meta = gd && gd.layout && gd.layout.meta && gd.layout.meta.mattervis_render;
           var canvasId = meta && meta.scene_id ? String(meta.scene_id) : "";
           var gestureId = window.__mvGestureSceneId ? String(window.__mvGestureSceneId) : "";
@@ -56,6 +81,8 @@ def register_camera_clientside(app) -> None:
           var lastGestureId = window.__mvLastGestureSceneId
             ? String(window.__mvLastGestureSceneId) : "";
           if (gestureId && canvasId && gestureId !== canvasId && gestureKind !== "wheel") return window.dash_clientside.no_update;
+          // A wheel still has to name the mounted scene below. The kind
+          // alone does not retarget this relayout onto the current canvas.
           // A wheel timeout clears the active gesture id and kind together
           // but keeps the last scene fence. An empty kind still fails the
           // wheel exception, so a late relayout cannot move onto the next
@@ -63,7 +90,47 @@ def register_camera_clientside(app) -> None:
           if (!gestureId && lastGestureId && canvasId && lastGestureId !== canvasId && gestureKind !== "wheel") {
             return window.dash_clientside.no_update;
           }
-          var sceneId = (gestureKind === "wheel" && canvasId) ? canvasId : (gestureId || canvasId);
+          // A geometry frame emits its camera relayout after the depth
+          // counter has already dropped. The canvas id is not a gesture,
+          // and neither is a projection change. A pointer follow-up is a
+          // pose that still names the pointer and is still inside the same
+          // 1000ms release used after pointerup. Pointer cancel used to
+          // leave that name in place with no release. The offscreen drag
+          // is one of these poses, and a second one is still stored: the
+          // first pointer-up sample is not the only commit.
+          function poseRelayout(value) {
+            var camera = value["scene.camera"] ||
+              (value.scene && value.scene.camera) || null;
+            if (camera && (camera.eye || camera.center || camera.up)) return true;
+            var names = Object.keys(value);
+            for (var p = 0; p < names.length; p++) {
+              var item = names[p];
+              if (item.indexOf("scene.camera.eye") === 0 ||
+                  item.indexOf("scene.camera.center") === 0 ||
+                  item.indexOf("scene.camera.up") === 0) return true;
+            }
+            return false;
+          }
+          function note(reason) {
+            window.__mvCaptureDiag = {reason: reason};
+          }
+          if (!poseRelayout(relayout)) {
+            note("projection-only");
+            return window.dash_clientside.no_update;
+          }
+          var endedAt = Number(window.__mvGestureEndedAt || 0);
+          var ownsCanvas = !!gestureId && (!canvasId || gestureId === canvasId);
+          var livePointer = ownsCanvas && gestureKind !== "wheel" && !endedAt;
+          var liveWheel = gestureKind === "wheel" && ownsCanvas;
+          var age = endedAt ? (Date.now() - endedAt) : 0;
+          var followUp = ownsCanvas && gestureKind === "pointer" && !!endedAt && age <= 1000;
+          if (!livePointer && !liveWheel && !followUp) {
+            note(gestureKind === "wheel" ? "wheel-other-scene" :
+              (ownsCanvas && endedAt ? "follow-up-expired" : "no-gesture"));
+            return window.dash_clientside.no_update;
+          }
+          note(liveWheel ? "wheel" : (livePointer ? "live-pointer" : "pointer-follow-up"));
+          var sceneId = gestureId || canvasId;
           if (!sceneId) return window.dash_clientside.no_update;
           return {
             scene_id: sceneId,
@@ -97,7 +164,10 @@ def register_camera_clientside(app) -> None:
               : Number(revision),
             scene_generation: data.scene_generation !== undefined && data.scene_generation !== null
               ? data.scene_generation
-              : (previous ? previous.scene_generation : null)
+              : (previous ? previous.scene_generation : null),
+            server_started_at: data.server_started_at !== undefined && data.server_started_at !== null
+              ? data.server_started_at
+              : (previous ? previous.server_started_at : null)
           };
           if (typeof window.__mvApplyServerCamera === "function") {
             window.__mvApplyServerCamera(id);

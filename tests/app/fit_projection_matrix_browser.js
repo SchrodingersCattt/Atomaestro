@@ -62,10 +62,22 @@ async function fit(page, projection, boundary) {
     if (!(await box.count())) return;
     if ((await box.isChecked()) === want) return;
     await box.locator("xpath=ancestor::label[1]").click();
-    await page.waitForFunction(({value, want}) => {
-      const node = document.querySelector(`#display-options input[value='${value}']`);
-      return !node || node.checked === want;
-    }, {value, want}, {timeout: 10000});
+    try {
+      await page.waitForFunction(({value, want}) => {
+        const node = document.querySelector(`#display-options input[value='${value}']`);
+        return !node || node.checked === want;
+      }, {value, want}, {timeout: 10000});
+    } catch (error) {
+      const observed = await page.evaluate(() => ({
+        capture: window.__mvCaptureDiag || null,
+        gesture: window.__mvGestureSceneId || "",
+        kind: window.__mvGestureKind || "",
+        endedAt: window.__mvGestureEndedAt || 0,
+        depth: window.__mvProgrammaticCameraDepth || 0,
+      }));
+      error.message += " capture-observable=" + JSON.stringify(observed);
+      throw error;
+    }
   }
   await setChecked("axes", false);
   await setChecked("unit_cell_box", boundary);

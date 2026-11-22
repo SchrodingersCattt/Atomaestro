@@ -145,7 +145,10 @@ a pan that ends outside the plot cannot leave the WebGL eye offscreen
 after the server has refit. An inside-plot release commits on canvas
 mouseup before that paint. A newer gesture or a different mounted
 scene drops it, and the paint keeps an overlapping frame from
-restoring the sampled eye. A capture the revision fence rejects does
+restoring the sampled eye. A dotted relayout of that sample is not
+stored, even if it is delivered after the restore flag has cleared.
+The pointer's own mouseup still sends the whole `scene.camera`.
+A capture the revision fence rejects does
 not replace that camera, and its response carries the camera that won.
 `window.__mvCaptureDiag.reason`
 records the decision. A camera revision does not by itself put the

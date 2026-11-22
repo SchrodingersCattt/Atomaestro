@@ -152,6 +152,15 @@ function paints() { return Number(root.__mvUncommittedPaintCount || 0); }
   gd.__mvInsideFrameReact = 0;
   await root.__mvRestoreInProgressDrag(gd);
   assert.equal(live.center.y, 0, 'overlapping frame restored the sampled pan over the accepted camera');
+
+  root.__mvGestureEndedAt = 0;
+  live.center = {x: 0, y: 0, z: 0};
+  live.eye = {x: 2, y: 0, z: 0};
+  root.__mvInProgressDragCamera = {camera: JSON.parse(JSON.stringify(panned)), key: sampleKey()};
+  root.__mvDragRestoreEye = null;
+  await root.__mvRestoreInProgressDrag(gd);
+  assert.equal(root.__mvDragRestoreEye && root.__mvDragRestoreEye.y, 1.4, 'drag restore did not remember its eye');
+  assert.equal(live.center.y, 1.4, 'drag restore did not put the sample back while the pointer was down');
 })().catch((error) => { console.error(error); process.exitCode = 1; });
 """
     result = subprocess.run(

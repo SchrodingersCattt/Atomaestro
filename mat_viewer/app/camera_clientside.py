@@ -68,6 +68,17 @@ def register_camera_clientside(app) -> None:
               !(wheelPose && eyeNear(relayoutEye, wheelPose.eye))) {
             return window.dash_clientside.no_update;
           }
+          // Putting the in-progress sample back is a dotted relayout.
+          // Dash may run this callback after that flag has cleared, and
+          // a live pointer would otherwise store the sample over the
+          // refit. The gesture's own commit is the whole scene.camera.
+          var restoreEye = window.__mvDragRestoreEye;
+          var wholeCamera = relayout["scene.camera"] ||
+            (relayout.scene && relayout.scene.camera);
+          if (!wholeCamera && restoreEye && relayoutEye && eyeNear(relayoutEye, restoreEye)) {
+            note("drag-restore");
+            return window.dash_clientside.no_update;
+          }
           var meta = gd && gd.layout && gd.layout.meta && gd.layout.meta.mattervis_render;
           var canvasId = meta && meta.scene_id ? String(meta.scene_id) : "";
           var gestureId = window.__mvGestureSceneId ? String(window.__mvGestureSceneId) : "";

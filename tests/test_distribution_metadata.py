@@ -116,12 +116,15 @@ def _isolated_project_artifacts(tmp_path: Path) -> list[Path]:
     output = tmp_path / "dist"
     env = os.environ.copy()
     env["SETUPTOOLS_SCM_PRETEND_VERSION"] = "9.9.9"
-    subprocess.run(
+    completed = subprocess.run(
         [sys.executable, "-m", "build", "--no-isolation", "--outdir", str(output)],
         cwd=destination,
         env=env,
-        check=True,
+        check=False,
+        capture_output=True,
+        text=True,
     )
+    assert completed.returncode == 0, completed.stderr
     artifacts = sorted(output.glob("*.whl")) + sorted(output.glob("*.tar.gz"))
     assert len(artifacts) == 2
     return artifacts

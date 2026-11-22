@@ -114,13 +114,29 @@ target identity rather than trace order.
 The invisible `*_selection` traces are marked as probes. They provide stable
 IDs for surfaces that cannot expose per-face customdata, but never become an
 occluder themselves. Thin bonds use a smaller pick tolerance than atoms and
-faces so a broad marker cannot steal a click at an atom centre. The policy is
+faces so a broad marker cannot steal a click at an atom centre. In the
+browser picker, a pointer inside an atom disc selects that atom. The bond
+cylinder crosses the same centre and does not take the click. The shaft
+outside every atom disc remains a bond. The policy is
 backend-neutral and can be reused by browser fixtures or a future native
 renderer without depending on Plotly internals.
 
 ## Selection / Appearance inspector
 
-A viewport click opens **Selection / Appearance**. Its default scope is the
+A viewport click opens **Selection / Appearance**. The inspector is a column
+beside the plot. `#mv-selection-appearance` is appended to `document.body`
+(or inside `#crystal-graph` when that host is unavailable). It is not an
+overlay on the plot. Opening it reserves `#center-panel` padding and refits
+the figure to the content box; closing it (clear, Esc, or a scene handoff)
+drops that padding and the status-bar and server-log offsets, then refits
+again. Atoms and bonds that remain in view stay on the canvas and can be
+picked. Pointer events on the column do not reach the plot. The dock
+keeps one `ResizeObserver` and one window `resize` listener for the
+current `#center-panel`. Replacing that panel disconnects the previous
+observer and removes the previous listener before installing the new
+pair. `MatterVisSelectionDock.teardown` drops both.
+
+Its default scope is the
 selected visible instances. Color, opacity, visibility, atom radius/material/
 representation and surface edge controls are offered according to the shared
 capability intersection. A mixed atom/surface selection cannot edit atom radius.

@@ -157,7 +157,8 @@ Notes for callers:
 - Scene create, rename, delete, reorder, duplicate, and undo append a
   `scene_catalog` envelope to the same journal and include
   `scene_catalog` on the WebSocket snapshot and on `GET /view-updates`.
-  The page rebuilds its existing tab strip from that message. The
+  The page rebuilds its existing tab strip from that message. The scene
+  display name comes from this catalog event; tab text is a projection. The
   selected tab stays put, except on the page that clicked Duplicate:
   that page selects the catalog `active_id` locally. `focus` stays
   false for create, rename, delete, reorder, duplicate, and undo, so
@@ -635,6 +636,18 @@ read back as the scene name. Passing a component label to Dash 2.18.2
 through 3.x raises `TypeError` while the layout is built and the page
 falls back to the error screen.
 
+A sidebar edit that arrives after `scene-tabs` has selected another scene,
+but before that scene's controls are recorded as filled, is not stored.
+The tab callback records the filled scene before it refits the camera, so a
+click after that record is an ordinary capture. A scene-tab control sync
+that lands after a later edit is dropped; the tab's own sync still applies
+while its epoch is current. A complete frame for the newly selected scene
+stays parked until that control stamp names the scene, so the canvas the
+page treats as current already has that scene's sidebar. The selection dock reserves its gutter and finishes the canvas refit
+before a pick becomes the observable selection. Escape clears the outline
+immediately, and the server clear is written only after that same relayout
+has settled, so the next pick uses the settled viewport.
+
 ## Stable UI element IDs
 
 Use these when scripting through Selenium / Playwright / Dash testing
@@ -719,7 +732,8 @@ The full list (authoritative; the diagram only groups them):
 - `view-projection` (Phase 4 view tools — `dcc.RadioItems` with
   values `perspective` / `orthographic`; mirrors
   `state["projection"]` and the camera's `projection.type` in both
-  directions)
+  directions). A click mints `view-projection-ticket` at pointerdown.
+  An older ticket cannot overwrite a newer projection for that scene.
 - `crystal-graph`
 - `topology-histogram`
 - `topology-results`
@@ -727,7 +741,12 @@ The full list (authoritative; the diagram only groups them):
 - `mv-status-bar`, `mv-status-structure`, `mv-status-scope`,
   `mv-status-counts`, `mv-status-busy`: canvas status bar and the
   working/rendering indicator. Counts follow the scene drawn for the
-  current display mode and transforms.
+  current display mode and transforms. A rename refreshes
+  `mv-status-structure` from the live scene in the same round as the tab
+  strip (`scene-event-store`), without waiting for another
+  `agent-state-store` write or a scene switch. The sidebar
+  `#upload-status` line (`Loaded: …`) takes the scene display name from
+  the catalog event, including a same-scene rename; tab text is a projection.
 - `perf-log-level`: server-log level filter (`debug` shows all,
   `info` hides fast callbacks, `warn` and `error` are stricter)
 - `save-preset-btn`

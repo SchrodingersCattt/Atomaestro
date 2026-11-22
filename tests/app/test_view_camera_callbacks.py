@@ -147,13 +147,26 @@ def test_projection_radio_follows_the_selected_tab(tmp_path: Path, monkeypatch):
         assert sync({"projection": "perspective"}, scene_b) is no_update
 
         monkeypatch.setattr(callbacks_view, "callback_context", SimpleNamespace(
-            triggered=[{"prop_id": "view-projection.value"}],
+            triggered=[{"prop_id": "view-projection-ticket.data"}],
         ))
-        camera, update, metadata, radio = callback(old_state, scene_b, "perspective")
+        camera, update, metadata, radio = callback(
+            old_state,
+            scene_b,
+            "orthographic",
+            {"projection": "perspective", "ticket": 2},
+        )
         assert camera["scene_id"] == scene_b
         assert update["payload"]["camera"]["projection"]["type"] == "perspective"
         assert metadata is not no_update
         assert radio is no_update
+        assert backend.get_state(scene_b)["projection"] == "perspective"
+        late = callback(
+            old_state,
+            scene_b,
+            "orthographic",
+            {"projection": "orthographic", "ticket": 1},
+        )
+        assert late == (no_update,) * 4
         assert backend.get_state(scene_b)["projection"] == "perspective"
     finally:
         app.close_extensions()

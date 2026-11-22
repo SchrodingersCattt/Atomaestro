@@ -507,3 +507,103 @@ assert.equal(sandbox.__mvSelectedSceneId, "scene-b");
         text=True,
     )
     assert completed.returncode == 0, completed.stderr + completed.stdout
+
+
+def test_scene_sync_applies_at_its_epoch_and_drops_after_a_later_edit():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is needed to execute the frontend regression")
+
+    script = Path(__file__).resolve().parents[2] / "frontend" / "assets" / "poll_fence.js"
+    program = r"""
+const fs = require("node:fs");
+const vm = require("node:vm");
+const assert = require("node:assert/strict");
+const syncBody = JSON.stringify({
+  output: [
+    {id: "material-selector", property: "value"},
+    {id: "agent-state-store", property: "data"},
+  ],
+  changedPropIds: ["scene-tabs.value"],
+});
+const payload = {
+  response: {"material-selector": {value: "mesh"}},
+  sideUpdate: {"style-selector": {value: "ball_stick"}},
+};
+let bumpEpoch = false;
+function responseFor(jsonBody) {
+  return {
+    status: 200,
+    statusText: "OK",
+    headers: {},
+    clone() { return this; },
+    json() {
+      if (bumpEpoch) sandbox.__mvUiEpoch = 5;
+      return Promise.resolve(JSON.parse(JSON.stringify(jsonBody)));
+    },
+  };
+}
+const sandbox = {
+  console, JSON, Math, Number, Object, String, Boolean, Array, Promise,
+  document: {addEventListener() {}, readyState: "complete"},
+  setTimeout() {},
+  setInterval() { return 0; },
+  clearInterval() {},
+  Headers: function () { this.delete = function () {}; },
+  Response: function (body) { this.body = body; },
+  __mvUiEpoch: 4,
+  __mvUnackedEpoch: 4,
+  __mvSelectedSceneId: "scene-b",
+};
+sandbox.window = sandbox;
+sandbox.fetch = function () { return Promise.resolve(responseFor(payload)); };
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[1], "utf8"), sandbox);
+const fence = sandbox.MatterVisPollFence;
+const tracked = fence.sceneSyncFence(syncBody, {epoch: 4, scene: "scene-a"});
+assert.equal(tracked.kind, "scene-sync");
+assert.equal(tracked.epoch, 4);
+assert.equal(fence.requestFence(syncBody, {epoch: 4, scene: "scene-a"}), null);
+assert.equal(
+  fence.responseIsStale(tracked, {epoch: 4, scene: "scene-b", unacked: 4}),
+  false,
+  "the tab click's own unacked flag must not drop its sync"
+);
+assert.equal(
+  fence.responseIsStale(tracked, {epoch: 5, scene: "scene-b", unacked: 0}),
+  true
+);
+function read(response) {
+  if (typeof response.body === "string") return Promise.resolve(JSON.parse(response.body));
+  return response.json();
+}
+sandbox.fetch("/_dash-update-component", {body: syncBody}).then(function (response) {
+  return read(response).then(function (kept) {
+    assert.equal(kept.response["material-selector"].value, "mesh");
+    assert.equal(payload.response["material-selector"].value, "mesh");
+    bumpEpoch = true;
+    return sandbox.fetch("/_dash-update-component", {body: syncBody});
+  }).then(function (response) {
+    return read(response);
+  }).then(function (dropped) {
+    assert.equal(JSON.stringify(dropped.response), "{}");
+    assert.equal(JSON.stringify(dropped.sideUpdate), "{}");
+    assert.equal(payload.response["material-selector"].value, "mesh");
+    process.exit(0);
+  });
+}).catch(function (error) {
+  console.error(error);
+  process.exit(1);
+});
+setTimeout(function () {
+  console.error("scene sync fence did not settle");
+  process.exit(1);
+}, 1000);
+"""
+    completed = subprocess.run(
+        ["node", "-e", program, str(script)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr + completed.stdout

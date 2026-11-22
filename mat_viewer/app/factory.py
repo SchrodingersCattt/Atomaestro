@@ -958,7 +958,7 @@ def _create_app(
                             "height": "100vh",
                             "overflowX": "hidden",
                             "overflowY": "auto",
-                            "borderLeft": "1px solid #DDDDDD",
+                            "borderLeft": "1px solid var(--mv-line, #DDDDDD)",
                         },
                     ),
                 ] if extension_panels else []),
@@ -1019,7 +1019,6 @@ def _create_app(
                 "display": "flex",
                 "height": "100vh",
                 "overflow": "hidden",
-                "backgroundColor": "#FFFFFF",
             },
         ))
 

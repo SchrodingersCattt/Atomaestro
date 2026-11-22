@@ -4,17 +4,18 @@ Read this only when the direct base render reports a missing command/capability
 or the request explicitly needs an optional frontend. The capability resolver is
 authoritative; do not maintain a second dependency guess in an agent script.
 
-The matrix below installs the `atomaestro` distribution built by this
-repository. The command remains `mat-vis`. Python imports remain `mat_viewer`.
+The command remains `mat-vis`. Python imports remain `mat_viewer`.
 
-`atomaestro` is not on PyPI until the next confirmed release. The last
-published release is still `matter-vis` 0.0.6. PyPI cannot rename that
-project. Do not install both full distributions into one environment. Until
-`atomaestro` is published, install the released package:
+Install the release that is on PyPI today. `atomaestro` is not published:
 
 ```bash
 python -m pip install "molcrys-kit==0.8.0" "matter-vis==0.0.6"
 ```
+
+The matrix below is the resolver output for this checkout's `atomaestro`
+distribution. Those commands are future installs. Do not run them until
+`atomaestro` is actually on PyPI. Do not install `matter-vis` and
+`atomaestro` into the same environment.
 
 ## Resolve on demand
 

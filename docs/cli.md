@@ -2,9 +2,10 @@
 
 Atomaestro renders atomistic structures and trajectories without launching the
 browser viewer. Every input format is parsed into the same canonical structure
-frame before scene construction. The command remains `mat-vis`. Optional
-extras in this tree use the `atomaestro` distribution; the published 0.0.6
-release is still `matter-vis`. See [the migration guide](rebranding.md).
+frame before scene construction. The command remains `mat-vis`. The
+published 0.0.6 release is `matter-vis`. Optional extras in this checkout
+use the unpublished `atomaestro` distribution. See
+[the migration guide](rebranding.md).
 
 ## Quick start
 

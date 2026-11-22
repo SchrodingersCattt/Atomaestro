@@ -5,7 +5,7 @@
 [![PyPI](https://img.shields.io/pypi/v/matter-vis.svg)](https://pypi.org/project/matter-vis/)
 [![CI](https://github.com/SchrodingersCattt/Atomaestro/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SchrodingersCattt/Atomaestro/actions/workflows/ci.yml)
 
-> **Package migration:** The GitHub project is **Atomaestro** (formerly MatterVis). This repository builds the `atomaestro` distribution. The command stays `mat-vis`, and Python imports stay `mat_viewer`. PyPI still serves [`matter-vis` 0.0.6](https://pypi.org/project/matter-vis/) until the next confirmed release; `atomaestro` is not published yet. Do not install both full distributions in one environment. Details: [migration guide](docs/rebranding.md) and [issue #316](https://github.com/SchrodingersCattt/Atomaestro/issues/316).
+> **Package migration:** The GitHub project is **Atomaestro** (formerly MatterVis). The command stays `mat-vis`, and Python imports stay `mat_viewer`. Install the published release, [`matter-vis` 0.0.6](https://pypi.org/project/matter-vis/). This repository builds `atomaestro`, which is not on PyPI yet. Do not install both full distributions in one environment. Details: [migration guide](docs/rebranding.md) and [issue #316](https://github.com/SchrodingersCattt/Atomaestro/issues/316).
 
 ## Overview
 
@@ -56,20 +56,23 @@ distribution name is `atomaestro`. See the [migration guide](docs/rebranding.md)
 
 ### From PyPI
 
-`atomaestro` is the new project and is not on PyPI until the next confirmed
-release:
+Install the release that is on PyPI today. The badge above points at it:
+
+```bash
+pip install "matter-vis==0.0.6"
+```
+
+`atomaestro` is the distribution name in this repository. It is not published.
+After a confirmed release is actually on PyPI, and not before, the command
+becomes:
 
 ```bash
 pip install atomaestro
 ```
 
-The release published today is still `matter-vis` 0.0.6. The PyPI badge above
-points at that release. Use it until `atomaestro` exists, and do not install
-both into the same environment:
-
-```bash
-pip install "matter-vis==0.0.6"
-```
+Do not install `matter-vis` and `atomaestro` into the same environment. Both
+full distributions own `mat_viewer` and the `mat-vis` script. No release
+version has been chosen.
 
 ### From source (development)
 

@@ -27,17 +27,18 @@ On 2026-11-22 the public JSON URLs `https://pypi.org/pypi/atomaestro/json` and `
 
 ## Install
 
-New installs, after `atomaestro` is on PyPI:
-
-```bash
-python -m pip install atomaestro
-mat-vis --help
-```
-
-Until that release exists, the published package is:
+Install the package that is on PyPI today:
 
 ```bash
 python -m pip install "matter-vis==0.0.6"
+mat-vis --help
+```
+
+`atomaestro` is not published. No release version has been chosen. After a
+confirmed release is actually on PyPI, and not before, the command becomes:
+
+```bash
+python -m pip install atomaestro
 mat-vis --help
 ```
 
@@ -94,13 +95,41 @@ The workflow file on disk is `.github/workflows/release.yml`. PyPI asks for the 
 
 [Publishing with a trusted publisher](https://docs.pypi.org/trusted-publishers/using-a-publisher/) requires `id-token: write`. [Attestations](https://docs.pypi.org/attestations/) are the PEP 740 publish attestation produced by the same OIDC identity. The action enables them by default; the workflow sets the input explicitly.
 
-## Proposed next version
+## PyPI upload is blocked on the MolCrysKit direct reference
 
-The published version is `0.0.6` (tag `v0.0.6`). No tag is created here. The proposed next release is **0.0.7**, because `mat-vis` and `mat_viewer` do not change. Confirm that version before tagging. If the distribution cut should be a minor boundary instead, the alternative is **0.1.0**.
+`pyproject.toml` still requires:
+
+```text
+molcrys-kit[desktop] @ git+https://github.com/SchrodingersCattt/MolCrysKit.git@2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6
+```
+
+That commit, dated 2026-11-20, is 30 commits after tag `v0.8.0` (`4aa65179`, 2026-10-23). It is the authorized runtime pin. This change does not replace it.
+
+Public PyPI rejects that requirement. PEP 440 says a public index should not allow direct references in an uploaded distribution, and Warehouse returns `Can't have direct dependency` for `Requires-Dist` values whose requirement URL is set ([warehouse #7136](https://github.com/pypi/warehouse/issues/7136), `warehouse.forklift.metadata`). A green build does not make the upload valid.
+
+Checked on 2026-11-22, the newest PyPI release is `molcrys-kit` 0.8.0 (also tagged `v0.8.0`). That release does not provide the pinned contract:
+
+| API | `v0.8.0` | commit `2a3ee11` |
+|---|---|---|
+| `BondRecord.role` | absent | present |
+| `MolecularCrystal.get_connectivity_report` | absent | present |
+| `read_mryx` / `read_mryx_atoms` | absent | present |
+| `desktop` extra (`defusedxml`, used by `read_mryx`) | absent | present |
+
+There is no released version, and therefore no normal `molcrys-kit>=X,<Y` range, that can replace the pin. Do not fall back to 0.8.0.
+
+`.github/scripts/reject_direct_dependencies.py` fails the release workflow when a built wheel or sdist contains a direct reference, when the canonical metadata lists no `Requires-Dist` at all, and when the tag is not `vX.Y.Z`. The wheel built from this tree carries the git URL above. Its sdist `PKG-INFO` currently omits every requirement, while `requires.txt` still records the same URL; both results fail the check. The build job runs it before uploading artifacts. The PyPI job and the GitHub Release job run it again before publishing. A tag push of this tree fails that check. That is the release block.
+
+Replacing the pin requires a MolCrysKit release that the user confirms by version. This pull request does not create that release. The confirmed release has to include the contract above and install on Windows as a normal PyPI requirement, because Atomaestro's Windows job and a public install cannot keep a git URL. Until that release exists, do not publish `atomaestro`.
+
+## Version
+
+The published Atomaestro predecessor is `matter-vis` 0.0.6. No next version is chosen here. Do not tag from this change.
 
 ## Still open
 
 - Account owner creates the pending publisher and the GitHub environment reviewer gate.
-- Confirmed tag publishes `atomaestro` and is verified by install.
+- A user-confirmed MolCrysKit release replaces the direct URL, and the metadata check then passes.
+- A chosen tag publishes `atomaestro` and is verified by install.
 - Separate empty `matter-vis` shim, only after that publish.
 - Issue #316 items that are outside this change: a second CLI command, trademark review, dependent-pin updates, and the Discussions announcement.

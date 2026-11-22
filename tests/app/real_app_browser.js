@@ -1511,6 +1511,139 @@ async function leftDrag(page, box) {
   await page.mouse.up();
 }
 
+async function cameraProbe(page) {
+  return page.evaluate(async () => {
+    const gd = document.querySelector("#crystal-graph .js-plotly-plot");
+    const scene = gd && gd._fullLayout && gd._fullLayout.scene && gd._fullLayout.scene._scene;
+    const camera = scene && scene.camera;
+    function vec(value) {
+      if (!value) return null;
+      return {
+        x: Number(value[0] !== undefined ? value[0] : value.x),
+        y: Number(value[1] !== undefined ? value[1] : value.y),
+        z: Number(value[2] !== undefined ? value[2] : value.z),
+      };
+    }
+    const layoutCamera = gd && gd.layout && gd.layout.scene && gd.layout.scene.camera;
+    const meta = gd && gd.layout && gd.layout.meta && gd.layout.meta.mattervis_render;
+    const sceneId = meta && meta.scene_id ? String(meta.scene_id) : "";
+    let server = null;
+    if (sceneId) {
+      try {
+        const state = await fetch("/api/v2/state?scene_id=" + encodeURIComponent(sceneId), {cache: "no-store"}).then((response) => response.json());
+        server = {
+          camera: state.camera || null,
+          camera_revision: state.camera_revision,
+          projection: state.projection,
+          display_mode: state.display_mode,
+        };
+      } catch (error) {
+        server = {error: String(error)};
+      }
+    }
+    const status = document.getElementById("mv-status-bar");
+    return {
+      live: camera ? {eye: vec(camera.eye), center: vec(camera.center), up: vec(camera.up), ortho: !!camera._ortho} : null,
+      layoutCenter: layoutCamera && layoutCamera.center || null,
+      capture: window.__mvCaptureDiag || null,
+      gesture: window.__mvGestureSceneId || "",
+      kind: window.__mvGestureKind || "",
+      endedAt: Number(window.__mvGestureEndedAt || 0),
+      relayouts: window.__mvPanRelayouts || [],
+      maxCenter: Number(window.__mvPanMaxCenter || 0),
+      sceneId,
+      cameraRevision: meta ? meta.camera_revision : null,
+      server,
+      title: (gd && gd.layout && gd.layout.title && gd.layout.title.text) || "",
+      status: ((status && status.innerText) || "").replace(/\s+/g, " ").trim(),
+    };
+  });
+}
+
+async function runOrthoPan(page) {
+  // A real right-button pan, with no Plotly.relayout injection. The
+  // injected offscreen camera in the other orthographic test is a
+  // different path.
+  await page.setViewportSize({width: 1280, height: 800});
+  await clickTab(page, "DAP-4");
+  const beforeUnitCell = await figureRevision(page);
+  const unitCellChanged = await selectUnitCell(page);
+  await waitForUnitCellFigure(page, unitCellChanged ? beforeUnitCell : -1);
+  await ensureOrthographic(page);
+  const before = await readView(page);
+  const beforeInk = await canvasInk(page);
+  if (!before.ortho || before.radio !== "orthographic" || !(before.traces > 0) || beforeInk < CANVAS_INK_FLOOR) {
+    fail(`unit cell was already blank ${JSON.stringify({before, beforeInk})}`);
+  }
+  await page.evaluate(() => {
+    const gd = document.querySelector("#crystal-graph .js-plotly-plot");
+    window.__mvPanRelayouts = [];
+    if (!gd || gd.__mvPanRelayoutWatch) return;
+    gd.__mvPanRelayoutWatch = true;
+    gd.on("plotly_relayout", (data) => {
+      const camera = data && (data["scene.camera"] || (data.scene && data.scene.camera));
+      const center = (camera && camera.center) || (data && data["scene.camera.center"]) || null;
+      const eye = (camera && camera.eye) || (data && data["scene.camera.eye"]) || null;
+      const hypot = center ? Math.hypot(Number(center.x), Number(center.y), Number(center.z)) : 0;
+      window.__mvPanMaxCenter = Math.max(Number(window.__mvPanMaxCenter || 0), hypot);
+      window.__mvPanRelayouts.push({
+        keys: data ? Object.keys(data).slice(0, 16) : [],
+        center,
+        eye,
+      });
+      if (window.__mvPanRelayouts.length > 12) window.__mvPanRelayouts.shift();
+    });
+  });
+  const canvas = page.locator("#crystal-graph canvas").first();
+  const box = await canvas.boundingBox();
+  if (!box) fail("crystal canvas has no box");
+  async function sweep(releaseOutside) {
+    const y = box.y + box.height * 0.55;
+    await page.mouse.move(box.x + box.width * 0.9, y);
+    await page.mouse.down({button: "right"});
+    const endX = releaseOutside ? 24 : box.x + 6;
+    const steps = 24;
+    for (let step = 1; step <= steps; step += 1) {
+      const x = (box.x + box.width * 0.9) + (endX - (box.x + box.width * 0.9)) * (step / steps);
+      await page.mouse.move(x, y);
+      await page.waitForTimeout(16);
+    }
+    await page.mouse.up({button: "right"});
+  }
+  // Two separate right-button pans. The second releases outside the
+  // plot, which is how a large manual pan leaves the canvas. No
+  // Plotly.relayout and no Fit.
+  await sweep(false);
+  await page.waitForTimeout(30);
+  await sweep(true);
+  const title = await page.locator("#crystal-graph .gtitle, #crystal-graph text.gtitle").first().textContent().catch(() => "");
+  try {
+    await page.waitForFunction(() => {
+      const gd = document.querySelector("#crystal-graph .js-plotly-plot");
+      const camera = gd && gd._fullLayout && gd._fullLayout.scene && gd._fullLayout.scene._scene && gd._fullLayout.scene._scene.camera;
+      if (!camera || !camera.center || !camera._ortho) return false;
+      const center = camera.center;
+      const x = Number(center[0] !== undefined ? center[0] : center.x);
+      const y = Number(center[1] !== undefined ? center[1] : center.y);
+      const z = Number(center[2] !== undefined ? center[2] : center.z);
+      return [x, y, z].every(Number.isFinite) && Math.hypot(x, y, z) < 0.5;
+    }, null, {timeout: 45000});
+  } catch (error) {
+    const settled = await cameraProbe(page);
+    const settledInk = await canvasInk(page);
+    fail(`manual orthographic pan stayed offscreen ${JSON.stringify({title, beforeInk, settledInk, settled, error: error.message})}`);
+  }
+  const settled = await cameraProbe(page);
+  if (Number(settled.maxCenter || 0) <= 1) {
+    fail(`right pan never left the origin ${JSON.stringify({settled})}`);
+  }
+  const recoveredInk = await canvasInk(page);
+  const recovered = await readView(page);
+  if (recoveredInk < CANVAS_INK_FLOOR || !recovered.ortho || recovered.sceneId !== before.sceneId) {
+    fail(`refit left the panned canvas blank ${JSON.stringify({recovered, recoveredInk})}`);
+  }
+}
+
 async function runOrthoDrag(page) {
   await clickTab(page, "DAP-4");
   const beforeUnitCell = await figureRevision(page);
@@ -2395,6 +2528,7 @@ const networkEvents = [];
   else if (mode === "theme") await runTheme(page);
   else if (mode === "drag-replot") await runDragReplot(page);
   else if (mode === "ortho-drag") await runOrthoDrag(page);
+  else if (mode === "ortho-pan") await runOrthoPan(page);
   else if (mode === "projection-scale") await runProjectionScaleSwitch(page);
   else if (mode === "renderer-lifecycle") await runRendererLifecycle(page);
   else if (mode === "mixed-projection" || mode === "mixed-projection-http") await require("./projection_mixed_browser")(page, clickTab, waitForServerState);

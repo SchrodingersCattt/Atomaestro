@@ -125,7 +125,11 @@ must not change scene B, and a stale revision must not replace a newer one.
   projection, and a refit that advances the revision still win. A
   camera that leaves the scene, including a unit-cell box with a corner
   outside the frustum, is still replaced by `refit_scene_camera` before
-  that pose is what the store paints. Every writer of
+  that pose is what the store paints. A pointer release that never
+  emits a camera relayout, such as a pan that ends outside the plot,
+  paints this accepted camera instead of leaving the WebGL eye where
+  the drag stopped. A drag the revision fence rejects is not stored,
+  and the response still carries the camera that won. Every writer of
   `camera-state-store` uses `allow_duplicate`.
 - One per-graph FIFO task owns a complete frame and the camera writes that
   belong to it. The projection follow-up, a fitted-range restore, and the

@@ -110,7 +110,12 @@ def test_late_drag_after_reset_is_rejected_by_camera_revision(tmp_path):
             last_commit=0.0,
             min_interval_s=0.25,
         )
-        assert result is None
+        assert result is not None
+        assert result["repaint"] is True
+        assert result["refit"] is False
+        assert result["view_update"] is None
+        assert result["camera_store"]["camera"] == after_reset["camera"]
+        assert result["camera_store"]["camera_revision"] == after_reset["camera_revision"]
         assert backend.get_state(scene_id)["camera"] == after_reset["camera"]
         assert backend.get_state(scene_id)["camera_revision"] == after_reset["camera_revision"]
     finally:
@@ -182,7 +187,11 @@ def test_reset_during_drag_framing_keeps_the_reset_camera(tmp_path):
         release.wait(timeout=5)
         worker.join(timeout=5)
         assert not worker.is_alive()
-        assert holder["result"] is None
+        result = holder["result"]
+        assert result is not None
+        assert result["repaint"] is True
+        assert result["refit"] is False
+        assert result["camera_store"]["camera"] == after_reset["camera"]
         assert backend.get_state(scene_id)["camera"] == after_reset["camera"]
         assert backend.get_state(scene_id)["camera_revision"] == after_reset["camera_revision"]
     finally:

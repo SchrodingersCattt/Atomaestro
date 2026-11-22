@@ -139,7 +139,12 @@ a projection change is not a pose. A relayout is stored for a live
 pointer, a wheel whose gesture names the mounted scene, or a pointer
 follow-up that still names that scene and is inside the 1000ms release
 after pointerup or pointercancel. That follow-up can be more than one
-pose. The offscreen drag is one of them. `window.__mvCaptureDiag.reason`
+pose. The offscreen drag is one of them. A pointer release that does not
+emit a camera relayout paints the camera the store already accepted, so
+a pan that ends outside the plot cannot leave the WebGL eye offscreen
+after the server has refit. A capture the revision fence rejects does
+not replace that camera, and its response carries the camera that won.
+`window.__mvCaptureDiag.reason`
 records the decision. A camera revision does not by itself put the
 server checklist back over an in-flight unit-cell edit.
 

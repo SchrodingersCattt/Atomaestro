@@ -202,9 +202,13 @@ Notes for callers:
   `scene_generation`. Every writer of that store uses `allow_duplicate`.
   Returning to the scene paints the store camera for that same revision
   and generation, not the pose baked into the last complete frame. A
-  store older than the mounted revision is ignored. A clipped or
+  store older than the mounted revision is ignored.   A clipped or
   off-screen camera is still replaced by the scene refit before the
-  store is what the canvas paints. A transient camera revision is read back only for that same generation and
+  store is what the canvas paints. A pointer release that moves the
+  WebGL camera without a relayout, including a pan that ends outside
+  the plot, paints that accepted camera. A drag whose revision lost
+  to Reset or a refit is not stored, and the capture response carries
+  the camera that won so the canvas paints it. A transient camera revision is read back only for that same generation and
   epoch. A width/height replot during an in-progress drag restores the live
   drag camera only when that drag's scene generation and, when both sides
   have one, server session still match the mounted figure.   A frame or

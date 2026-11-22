@@ -27,24 +27,9 @@ def add_polyhedron_disorder_argument(parser: argparse.ArgumentParser) -> None:
 
 def add_bond_policy_arguments(parser: argparse.ArgumentParser) -> None:
     """Add the shared MolCrysKit connectivity controls to a parser."""
-    parser.add_argument(
-        "--bond-scale",
-        type=float,
-        default=None,
-        metavar="SCALE",
-        help="Positive MolCrysKit bond-perception scale (default: 1.0).",
-    )
-    parser.add_argument(
-        "--bond-threshold",
-        action="append",
-        default=[],
-        dest="bond_threshold_specs",
-        metavar="ELEMENT1,ELEMENT2=CUTOFF",
-        help=(
-            "Override one MolCrysKit element-pair cutoff in Å; repeat the "
-            "option for multiple pairs."
-        ),
-    )
+    from ..cli_lazy import add_bond_policy_arguments as _add
+
+    _add(parser)
 
 
 def bond_thresholds_from_args(args: argparse.Namespace) -> dict[tuple[str, str], float]:

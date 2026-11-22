@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import threading
 
-from dash import no_update
+from dash import dcc, html, no_update
 
 from .display_controls import visible_display_options
 from ..properties import web_colormap_options
@@ -274,6 +274,70 @@ def remember_filled_scene(filled: dict, client_id, scene_id) -> None:
     """
     with _fence_lock:
         _remember_filled_scene_locked(filled, client_id, scene_id)
+
+
+
+def _drop_acknowledged_pending(backend, state) -> None:
+    """Drop a queued snapshot the tab callback is already delivering.
+
+    Duplicate arms ``pending_state`` and then selects the new tab. This
+    callback writes that scene's controls, including the rename box. Leaving
+    the snapshot queued makes the next poll write the same label again and
+    replace text the user has started typing. A snapshot that moved past the
+    state being delivered (a rename that landed mid-switch) stays queued.
+    """
+    with backend._lock:
+        pending = backend.pending_state
+        if not isinstance(pending, dict):
+            return
+        if str(pending.get("scene_id") or "") != str(state.get("scene_id") or ""):
+            return
+        if any(
+            int(pending.get(key, 0) or 0) > int(state.get(key, 0) or 0)
+            for key in _STATE_VERSION_KEYS
+        ):
+            return
+        backend.pending_state = None
+
+
+def _restore_pending_if_absent(backend, state) -> None:
+    """Put a snapshot back when a stale poll had already taken it.
+
+    A tab switch or a newer edit can land after the poll passed its first
+    check and popped the queue. A snapshot that arrived in that window
+    stays; only an empty queue is filled.
+    """
+    if not isinstance(state, dict):
+        return
+    with backend._lock:
+        if backend.pending_state is None:
+            backend.pending_state = state
+
+
+def checklist_after_reconcile(mode, reconciled, incoming):
+    """Checklist value after display options are reconciled.
+
+    Returns ``no_update`` when the control already shows that value, so
+    restoring a stored Cell boundary does not echo another ``capture_state``.
+    """
+    visible = visible_display_options(mode, reconciled)
+    if list(visible) == list(incoming or []):
+        return no_update
+    return visible
+
+
+def interaction_fence_children():
+    """Hidden stores for one browser's poll fence.
+
+    The epoch and client id travel with sidebar captures. The sink is the
+    acknowledgement output; it is not shown.
+    """
+    return (
+        dcc.Store(id="ui-interaction-epoch", data=0),
+        dcc.Store(id="ui-client-id", data=None),
+        dcc.Store(id="view-projection-ticket", data=None),
+        html.Div(id="ui-interaction-sink", style={"display": "none"}),
+    )
 
 
 def filled_scene_id(filled: dict, client_id=None) -> str:

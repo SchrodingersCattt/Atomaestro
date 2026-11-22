@@ -15,6 +15,22 @@ def register_camera_clientside(app) -> None:
     if not hasattr(app, "clientside_callback"):
         return
     app.clientside_callback(
+        """
+        function(value) {
+          var click = window.__mvProjectionClick;
+          if (!click || String(click.value) !== String(value)) {
+            return window.dash_clientside.no_update;
+          }
+          var ticket = click.ticket;
+          window.__mvProjectionClick = null;
+          return {projection: String(value), ticket: ticket};
+        }
+        """,
+        Output("view-projection-ticket", "data"),
+        Input("view-projection", "value"),
+        prevent_initial_call=True,
+    )
+    app.clientside_callback(
             """
             function(relayout) {
           if (!relayout || typeof relayout !== "object") return window.dash_clientside.no_update;

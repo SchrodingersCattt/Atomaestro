@@ -132,9 +132,13 @@ must not change scene B, and a stale revision must not replace a newer one.
   mouseup relayout before that paint, and the committed pan stays
   with the server. The paint is dropped when a newer pointer gesture
   has started or the mounted scene is no longer the one that was
-  released. It counts as a camera relayout after pointer-up even
+  released.   It counts as a camera relayout after pointer-up even
   while a frame react is still open, so that frame does not put the
-  sampled eye back over the accepted camera. A drag the revision
+  sampled eye back over the accepted camera. A dotted relayout that
+  only puts that in-progress sample back is not stored, including
+  when it arrives after the restore flag has cleared. The pointer's
+  own mouseup still sends the whole `scene.camera` and is stored.
+  A drag the revision
   fence rejects is not stored, and the response still carries the
   camera that won. Every writer of
   `camera-state-store` uses `allow_duplicate`.

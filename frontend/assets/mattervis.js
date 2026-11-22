@@ -1250,6 +1250,11 @@
       if (!now || camerasClose(now, saved)) return Promise.resolve();
       const patch = cameraOnlyPatch(saved);
       if (!patch) return Promise.resolve();
+      /* Dash can deliver this relayout after the flag below has
+       * cleared. The eye stays on the window so that late callback
+       * still recognizes the sample and does not store it. The
+       * pointer's own mouseup is the whole scene.camera and is kept. */
+      if (saved.eye) window.__mvDragRestoreEye = saved.eye;
       gd.__mvRestoringDrag = true;
       let pending = null;
       try { pending = runAsQueueOwner(gd, function () { return window.Plotly.relayout(gd, patch); }); }
@@ -1407,6 +1412,7 @@
         const sampled = dragSampleCamera();
         const dragPose = sampled && !camerasClose(after, sampled) ? sampled : before;
         if (dragPose && !camerasClose(after, dragPose)) {
+          if (dragPose.eye) window.__mvDragRestoreEye = dragPose.eye;
           return ownedRelayout(cameraOnlyPatch(dragPose)).catch(function () {});
         }
       }
@@ -3947,6 +3953,7 @@
     window.__mvGestureEndedAt = 0;
     window.__mvGestureUserRelayoutAt = 0;
     window.__mvGesturePointerRelayoutSeen = false;
+    window.__mvDragRestoreEye = null;
     watchGestureCameraCommit();
     window.__mvCaptureCommitSeen = false;
     window.__mvProgrammaticCameraStamp = null;

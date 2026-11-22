@@ -1610,6 +1610,28 @@ async function runOrthoPan(page) {
     }
     await page.mouse.up({button: "right"});
   }
+  // A short release inside the plot must keep the pan. Plotly emits
+  // that camera on canvas mouseup, before the uncommitted-camera paint.
+  const y = box.y + box.height * 0.55;
+  const startX = box.x + box.width * 0.45;
+  await page.evaluate(() => { window.__mvUncommittedPaintCount = 0; });
+  await page.mouse.move(startX, y);
+  await page.mouse.down({button: "right"});
+  await page.mouse.move(startX + 160, y, {steps: 10});
+  await page.mouse.up({button: "right"});
+  await page.waitForTimeout(50);
+  const inside = await cameraProbe(page);
+  const insidePaints = await page.evaluate(() => Number(window.__mvUncommittedPaintCount || 0));
+  const insideCenter = inside.live && inside.live.center;
+  const committedCenter = (inside.relayouts || []).reduce((found, item) => {
+    return item && item.center ? item.center : found;
+  }, null);
+  const moved = insideCenter && Math.hypot(Number(insideCenter.x), Number(insideCenter.y), Number(insideCenter.z)) > 0.05;
+  const kept = insideCenter && committedCenter &&
+    Math.hypot(Number(insideCenter.x) - Number(committedCenter.x), Number(insideCenter.y) - Number(committedCenter.y), Number(insideCenter.z) - Number(committedCenter.z)) < 0.05;
+  if (insidePaints !== 0 || !moved || !kept) {
+    fail(`inside release did not keep the pan ${JSON.stringify({insidePaints, inside})}`);
+  }
   // Two separate right-button pans. The second releases outside the
   // plot, which is how a large manual pan leaves the canvas. No
   // Plotly.relayout and no Fit.

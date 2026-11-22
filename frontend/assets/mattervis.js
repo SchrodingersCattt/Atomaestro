@@ -3794,9 +3794,16 @@
       const mounted = render && render.scene_id ? String(render.scene_id) : "";
       if (!mounted) return;
       if (stamped && mounted && stamped !== mounted) return;
+      /* The wrapper does not count a relayout while a frame react is
+       * open. This paint is still a camera write after pointer-up, and
+       * the overlapping frame must not put the sampled eye back. */
+      gd.__mvExternalRelayouts = Number(gd.__mvExternalRelayouts || 0) + 1;
+      window.__mvUncommittedPaintCount = Number(window.__mvUncommittedPaintCount || 0) + 1;
       window.__mvApplyServerCamera(mounted);
     }, 0);
   }
+  window.__mvPaintUncommittedCamera = paintUncommittedCamera;
+  window.__mvGestureGeneration = function () { return gestureGeneration; };
   function restoreOwnedCamera(generation, gestureId) {
     const foreign = gestureId ? String(gestureId) : "";
     if (!foreign || generation !== gestureGeneration) return;

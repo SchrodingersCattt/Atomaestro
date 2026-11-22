@@ -204,9 +204,12 @@ Notes for callers:
   and generation, not the pose baked into the last complete frame. A
   store older than the mounted revision is ignored.   A clipped or
   off-screen camera is still replaced by the scene refit before the
-  store is what the canvas paints. A pointer release that moves the
+  store is what the canvas paints.   A pointer release that moves the
   WebGL camera without a relayout, including a pan that ends outside
-  the plot, paints that accepted camera. A drag whose revision lost
+  the plot, paints that accepted camera. An inside-plot release
+  commits on canvas mouseup before that paint. A newer gesture or a
+  different mounted scene drops it, and the paint keeps a frame that
+  started during the drag from restoring the sampled eye. A drag whose revision lost
   to Reset or a refit is not stored, and the capture response carries
   the camera that won so the canvas paints it. A transient camera revision is read back only for that same generation and
   epoch. A width/height replot during an in-progress drag restores the live

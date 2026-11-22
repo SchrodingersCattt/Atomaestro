@@ -142,7 +142,10 @@ after pointerup or pointercancel. That follow-up can be more than one
 pose. The offscreen drag is one of them. A pointer release that does not
 emit a camera relayout paints the camera the store already accepted, so
 a pan that ends outside the plot cannot leave the WebGL eye offscreen
-after the server has refit. A capture the revision fence rejects does
+after the server has refit. An inside-plot release commits on canvas
+mouseup before that paint. A newer gesture or a different mounted
+scene drops it, and the paint keeps an overlapping frame from
+restoring the sampled eye. A capture the revision fence rejects does
 not replace that camera, and its response carries the camera that won.
 `window.__mvCaptureDiag.reason`
 records the decision. A camera revision does not by itself put the

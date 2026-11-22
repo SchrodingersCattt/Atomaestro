@@ -1,0 +1,37 @@
+# Synthetic P21/c cell. Not a published structure.
+#
+# The ordered C-O sits inside the cell and is the formula unit, so that
+# drawing has no disorder. The second C-O is split into two orientations
+# and crosses the a face (1.44 angstrom across the boundary), so the unit
+# cell repeats it as visual copies. Symmetry expansion puts disordered
+# sites outside the asymmetric-unit drawing and inside the cluster.
+data_synthetic_scope_disorder
+_symmetry_space_group_name_H-M   'P 1 21/c 1'
+_symmetry_Int_Tables_number       14
+_cell_length_a                    12.0
+_cell_length_b                    12.0
+_cell_length_c                    14.0
+_cell_angle_alpha                 90
+_cell_angle_beta                  100
+_cell_angle_gamma                 90
+loop_
+_symmetry_equiv_pos_as_xyz
+x,y,z
+-x,y+1/2,-z+1/2
+-x,-y,-z
+x,-y+1/2,z+1/2
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+_atom_site_disorder_assembly
+_atom_site_disorder_group
+C1 C 0.30 0.40 0.35 1.00 . .
+O1 O 0.42 0.40 0.35 1.00 . .
+C2 C 0.06 0.20 0.55 0.60 A 1
+O2 O 0.94 0.20 0.55 0.60 A 1
+C3 C 0.06 0.28 0.62 0.40 A 2
+O3 O 0.94 0.28 0.62 0.40 A 2

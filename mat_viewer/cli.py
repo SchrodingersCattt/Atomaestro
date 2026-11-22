@@ -1016,26 +1016,53 @@ def _build_operate_parser(subparsers: argparse._SubParsersAction) -> None:
     build_operate_parser(subparsers)
 
 
-def _command_token(argv: list[str]) -> str | None:
-    """Return the selected subcommand, or None for root help and root errors.
+def _parser_builders() -> dict[str, object]:
+    return {
+        "render": _build_render_parser,
+        "inspect": _build_inspect_parser,
+        "capabilities": _build_capabilities_parser,
+        "serve": _build_serve_parser,
+        "tui": _build_tui_parser,
+        "operate": _build_operate_parser,
+    }
 
-    ``-h``/``--help`` before a command name prints the root summary.  That
-    summary lists every command without building the heavy parsers.  ``--``
-    is left for argparse: the root parser reports it as an invalid command,
-    matching the parser that registers every subcommand up front.
+
+def _command_selection(argv: list[str]) -> tuple[str | None, str | None]:
+    """Return ``(direct command, token after --)``.
+
+    ``-h``/``--help`` before a command name prints the root summary. ``--``
+    stays in the argument list. Python 3.12.16 skips it and selects the next
+    token; earlier releases report ``--`` as an invalid command. The caller
+    registers every summary and the real parser for a known following command
+    so both outcomes match a parser that was built up front.
     """
+    seen_double_dash = False
     for token in argv:
-        if token in {"-h", "--help"}:
-            return None
-        if token.startswith("-") and token != "--":
+        if token == "--":
+            seen_double_dash = True
             continue
-        return token
-    return None
+        if not seen_double_dash and token in {"-h", "--help"}:
+            return None, None
+        if not seen_double_dash and token.startswith("-"):
+            continue
+        if seen_double_dash:
+            return None, token
+        return token, None
+    return None, None
 
 
-def _register_command_summaries(subparsers: argparse._SubParsersAction) -> None:
+def _register_command_summaries(
+    subparsers: argparse._SubParsersAction,
+    *,
+    real: str | None = None,
+) -> None:
+    builders = _parser_builders()
     for name, help_text in _COMMAND_HELP:
-        subparsers.add_parser(name, help=help_text)
+        builder = builders.get(name) if name == real else None
+        if builder is None:
+            subparsers.add_parser(name, help=help_text)
+        else:
+            builder(subparsers)
 
 
 def main(argv: Optional[list[str]] = None) -> None:
@@ -1051,20 +1078,16 @@ def main(argv: Optional[list[str]] = None) -> None:
         description="MatterVis: publication-quality crystal structure visualization.",
     )
     subparsers = parser.add_subparsers(dest="command")
-    builders = {
-        "render": _build_render_parser,
-        "inspect": _build_inspect_parser,
-        "capabilities": _build_capabilities_parser,
-        "serve": _build_serve_parser,
-        "tui": _build_tui_parser,
-        "operate": _build_operate_parser,
-    }
-    command = _command_token(raw)
-    builder = builders.get(command) if command is not None else None
-    if builder is None:
-        _register_command_summaries(subparsers)
+    builders = _parser_builders()
+    command, after_double_dash = _command_selection(raw)
+    if after_double_dash is not None:
+        _register_command_summaries(subparsers, real=after_double_dash)
     else:
-        builder(subparsers)
+        builder = builders.get(command) if command is not None else None
+        if builder is None:
+            _register_command_summaries(subparsers)
+        else:
+            builder(subparsers)
 
     args = parser.parse_args(argv)
 

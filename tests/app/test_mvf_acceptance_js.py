@@ -36,7 +36,7 @@ const calls = [];
 let gd = {layout:{meta:{mattervis_render:{scene_id:'s', geometry_version:1, display_version:1, camera_version:1, scene_generation:'1'}}}, data:[{meta:{mv_role:'labels'}, x:[1], y:[1], z:[1]}]};
 const sandbox = {console, Promise, Number, String, Object, Array, JSON, window:{
   MatterVisViewCamera:{graph:()=>gd, applyAsync:()=>Promise.resolve(true)},
-  Plotly:{restyle:()=>Promise.resolve(), react:(target)=> {calls.push(target); return Promise.resolve();}},
+  Plotly:{restyle:()=>Promise.resolve(), react:(graph, data, layout)=> { graph.data = data; graph.layout = layout; calls.push(graph); return Promise.resolve(); }},
 }};
 vm.createContext(sandbox);
 vm.runInContext(source, sandbox);
@@ -148,7 +148,12 @@ const gd = {layout:{meta:{mattervis_render:{scene_id:'s', geometry_version:1, di
 let fail = true;
 const sandbox = {console, Promise, Number, String, Object, Array, JSON, Date, window:{
   MatterVisViewCamera:{graph:()=>gd, reportStatus:(level, message)=>{ sandbox.window.__mvRenderStatus = {level, message}; }},
-  Plotly:{react:()=> fail ? Promise.reject(new Error('react failed')) : Promise.resolve(), restyle:()=>Promise.reject(new Error('restyle failed'))},
+  Plotly:{react(graph, data, layout) {
+    if (fail) return Promise.reject(new Error('react failed'));
+    graph.data = data;
+    graph.layout = layout;
+    return Promise.resolve(graph);
+  }, restyle:()=>Promise.reject(new Error('restyle failed'))},
 }};
 vm.createContext(sandbox);
 vm.runInContext(source, sandbox);
@@ -159,7 +164,7 @@ const submit = sandbox.window.MatterVisViewUpdates.submit;
   assert.match(sandbox.window.__mvRenderStatus.message, /worker failed/);
   await assert.rejects(submit({type:'figure', scene_id:'s', update_kind:'geometry', geometry_version:2, display_version:1, camera_version:1, figure:{data:[{type:'scatter3d', x:[1], y:[1], z:[1]}], layout:{scene:{}}}}));
   fail = false;
-  const retried = await submit({type:'figure', scene_id:'s', update_kind:'geometry', geometry_version:2, display_version:1, camera_version:1, operation_id:'retry', figure:{data:[{type:'scatter3d', x:[1], y:[1], z:[1]}], layout:{scene:{}}}});
+  const retried = await submit({type:'figure', scene_id:'s', update_kind:'geometry', geometry_version:2, display_version:1, camera_version:1, operation_id:'retry', figure:{data:[{type:'scatter3d', meta:{mv_role:'atom'}, x:[1], y:[1], z:[1]}], layout:{scene:{}}}});
   assert.equal(retried, 'figure');
   await assert.rejects(submit({type:'view_update', update_kind:'display', scene_id:'s', geometry_version:2, display_version:4, camera_version:1, payload:{display_options:[], opacity:0.4}}));
   assert.match(sandbox.window.__mvRenderStatus.message, /display patch failed/);
@@ -412,6 +417,23 @@ assert.equal(selectAll.prevented, true);
 assert.equal(stores.at(-1).data.action, 'select_all');
 const typedSelect = press('a', {tagName:'TEXTAREA'}, {ctrlKey:true});
 assert.equal(typedSelect.prevented, false);
+let released = null;
+sandbox.window.MatterVisSelectionDock = {
+  afterGutter(open, done) { released = {open, done}; },
+};
+const beforeClear = stores.length;
+press('Escape', {tagName:'DIV', isContentEditable:false});
+assert.equal(stores.length, beforeClear);
+assert.equal(released && released.open, false);
+sandbox.CustomEvent = class CustomEvent {
+  constructor(type, init) { this.type = type; this.detail = init && init.detail; }
+};
+sandbox.window.dispatchEvent = function () {};
+released.done();
+assert.equal(stores.at(-1).data.action, 'select_clear');
+const selectionWrite = stores.filter((item) => item.id === 'scene-selection-store').at(-1);
+assert.equal(selectionWrite.data.mode, 'clear');
+assert.equal(selectionWrite.data.targets.length, 0);
 """,
         ASSETS / "mattervis.js",
     )
@@ -423,7 +445,7 @@ def test_long_run_delivery_map_stays_bounded():
 const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
 const source = fs.readFileSync(process.argv[1], 'utf8');
 const gd = {layout:{meta:{mattervis_render:{scene_id:'s', geometry_version:1, display_version:1, camera_version:0}}}, data:[]};
-const sandbox = {console, Promise, Number, String, Object, Array, JSON, window:{MatterVisViewCamera:{graph:()=>gd}, Plotly:{react:()=>Promise.resolve()}}};
+const sandbox = {console, Promise, Number, String, Object, Array, JSON, window:{MatterVisViewCamera:{graph:()=>gd}, Plotly:{react:(graph, data, layout)=> { graph.data = data; graph.layout = layout; return Promise.resolve(graph); }}}};
 vm.createContext(sandbox);
 vm.runInContext(source, sandbox);
 const submit = sandbox.window.MatterVisViewUpdates.submit;

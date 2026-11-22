@@ -43,6 +43,7 @@ The same routing as a quick table:
 | If you want to… | Read |
 |---|---|
 | Drive the running Dash viewer over HTTP/WebSocket | [`dash_service.md`](dash_service.md) |
+| Fit the camera to unit-cell corners or atom extents in either projection | [`dash_service.md`](dash_service.md) |
 | Update an already-open viewer from an external script without reloading the page | [`dash_service.md`](dash_service.md) |
 | Download the active loaded source structure as CIF | [`dash_service.md#rest-endpoints`](dash_service.md) |
 | Detect a running server whose code is older than the files on disk | [`dash_service.md`](dash_service.md) |
@@ -56,13 +57,16 @@ The same routing as a quick table:
 | Read terminal pictures with element symbols, molecule silhouettes, text depth bands, crossing-bond gaps, layer slicing, and optional rotation parallax | [`tui_api.md`](tui_api.md) |
 | Import Mercury MRYX stored sites through MolCrysKit (read-only, explicit limitations) | [`../mryx.md`](../mryx.md) |
 | Render CIF, Cube, VASP, XYZ, ASE trajectory, or LAMMPS files from the CLI | [`../cli.md`](../cli.md) |
+| Choose `vdw` (MolCrysKit/Bondi radii) or `flat_illustration` without changing the default ball-and-stick look | [`../cli.md`](../cli.md) and [`scene_api.md`](scene_api.md) |
 | Label trajectory frames with physical simulation time while keeping playback FPS independent | [`../cli.md`](../cli.md#frames-and-animations) |
 | Build or compose a canonical structure scene from Python | [`scene_api.md`](scene_api.md) |
 | Render project-independent 3-D mesh or implicit geometry entities with real depth | [`scene_api.md`](scene_api.md) |
 | Match a dense coordination-polyhedron publication layout | [`static_publication.md`](static_publication.md) |
 | Build a static cube/orbital figure (HOMO, LUMO, density) | [`cube_api.md`](cube_api.md) |
+| Choose a Blinn–Phong surface preset (`matte`, `hard_plastic`, `metal_like`, `glass_like`) for CPU atoms, bonds, and isosurfaces | [`surface_material.md`](surface_material.md) |
 | Render cube isosurfaces as complete triangulated wireframes | [`cube_api.md`](cube_api.md#isosurface-wireframe) |
 | Color a cube isosurface from a second scalar cube | [`cube_api.md`](cube_api.md#isosurface-color) |
+| Shade a cube isosurface with one shared material | [`cube_api.md`](cube_api.md#isosurface-material) |
 | Render ORTEP / thermal ellipsoid figures | [`ortep_api.md`](ortep_api.md) |
 | Color atoms by charge, velocity, stress, or another per-atom field | [`atom_property_coloring.md`](atom_property_coloring.md) |
 | Add a/b/c (or x/y/z, k-path, dipole) direction indicators to any 3D plot | [`compass_api.md`](compass_api.md) |
@@ -80,6 +84,7 @@ The same routing as a quick table:
 | Draw unit-cell ball-and-stick sticks from MolCrysKit bond role and connectivity regime | [`scene_api.md`](scene_api.md) |
 | Audit which backend-neutral render controls are available from the CLI | [`cli-api-parity.md`](cli-api-parity.md) |
 | Use the optional native offscreen GPU PNG backend | [`gpu_backend.md`](gpu_backend.md) |
+| Choose CPU lighting (`studio_soft`, `unlit`) without changing the mesh/flat technique | [`lighting.md`](lighting.md) |
 | Read or override global Atomaestro defaults | [`config_api.md`](config_api.md) |
 | Select atoms/fragments in the live viewer and promote a selection to a group | [`selection_api.md`](selection_api.md) |
 | Pick visible atoms, bonds, polyhedron/mesh faces and BFDH facets; edit selected appearance with per-property inheritance | [`selection_api.md`](selection_api.md) |

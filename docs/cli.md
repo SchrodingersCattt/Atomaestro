@@ -207,6 +207,19 @@ Supported inputs:
 | LAMMPS data/configuration | ASE LAMMPS data reader |
 | Other ASE-readable files | ASE auto-detection or --input-format |
 
+When an ASE frame supplies a non-negative integer `molecule_index` for every
+atom, MolCrysKit perceives bonds and periodic images within each source group;
+nearby atoms from different groups are not merged into a larger molecule.
+Disconnected atoms within a group may still become separate components. IDs
+need not be contiguous and the original per-atom array remains available.
+The current MolCrysKit identifier has no partition argument. The loader
+passes atoms outside each group as `exclude_indices` and keeps the
+indices MolCrysKit returns. It slices a group only for an identifier
+that accepts neither `exclude_indices` nor a partition array, and then
+rewrites only the partition-local endpoint indices.
+Without that array, the usual whole-frame bond perception is unchanged. The
+`--bond-scale` and `--bond-threshold` options apply within each group.
+
 LAMMPS numeric types are not elements. Pass --type-map whenever the source does
 not encode element identity unambiguously; the order is type 1, type 2, and so
 on. Atomaestro never guesses it from a model filename.
@@ -337,25 +350,61 @@ substitutes one frame backend for another.
 | Flag | Default | Description |
 |------|---------|-------------|
 | --view MODE | auto | Periodic input uses unit_cell; nonperiodic or synthetic-cell input uses cluster |
-| --style STYLE | ball_stick | ball_stick, ball, space_filling, stick, ortep, or wireframe |
+| --style STYLE | ball_stick | ball_stick, ball, space_filling, stick, ortep, wireframe, vdw, or flat_illustration |
 | --shading MODE | smooth | smooth or flat mesh shading |
+| --surface-material PRESET | current matte shade | CPU Blinn–Phong preset: `matte`, `hard_plastic`, `metal_like`, or `glass_like`. Separate from `--shading smooth\|flat`. `metal` and `glass` are rejected. Specular presets and `glass_like` with `--backend plotly` or `gpu` are rejected. `--renderer batch` with those presets errors; `auto` uses the general renderer |
 | --backend BACKEND | cpu | cpu (3D), matplotlib (projected 2D), plotly, or explicit native GPU PNG; never selected by fallback |
 | --orthogonal | yes | Orthographic projection |
 | --perspective | no | Perspective projection |
 | --isovalue VALUE | automatic | Explicit positive cube isosurface magnitude |
 | --isosurface-opacity VALUE | style default | Cube surface opacity in (0, 1] |
 | --isosurface-mode MODE | surface | surface or complete triangulated wireframe |
+| --isosurface-positive-color COLOR | #D55E00 | Positive cube phase colour |
+| --isosurface-negative-color COLOR | #0072B2 | Negative cube phase colour |
+| --isosurface-stride N | 2 | Marching-cubes grid stride on the `prepare_render` path. `1` is the fine mesh |
+| --isosurface-smooth / --no-isosurface-smooth | off | Taubin-smooth each phase on the `prepare_render` path (`mat-vis render`, including `--backend plotly` geometry). Off keeps the raw marching-cubes mesh. The isovalue is unchanged. `build_cube_figure` / `build_figure` ignore it and stay raw marching cubes |
 | --isosurface-wireframe-width VALUE | 1.0 | Wireframe line width in pixels |
 | --isosurface-wireframe-opacity VALUE | 1.0 | Wireframe line opacity in [0, 1] |
 | --isosurface-color-cube PATH | none | Second cube sampled in physical coordinates onto the isosurface |
 | --isosurface-color-range MIN MAX | finite min/max | Colormap range; a constant field with no range uses the midpoint |
 | --isosurface-color-center VALUE | none | Value placed at the middle of the colormap |
 | --isosurface-colormap NAME | bgr | `bgr` or a Matplotlib colormap name |
+| --isosurface-material NAME | historical Lambert pair | Surface-material id copied from the surface-material library (`matte`, `hard_plastic`, `metal_like`, `glass_like`). Not a private preset table, and not combined with the coefficient flags |
+| --isosurface-ambient VALUE | 0.68 | Ambient weight. Not required to sum to 1 with diffuse |
+| --isosurface-diffuse VALUE | 0.32 | Diffuse weight |
+| --isosurface-specular VALUE | 0 | White highlight weight |
+| --isosurface-shininess VALUE | 32 | Highlight exponent, at least 1 |
 | --periodic-isosurface / --no-periodic-isosurface | off | Enable or disable scalar closure across cell faces |
+| --lighting RIG | studio_soft | CPU rig: `studio_soft` (default, not retuned), `unlit`, or `studio_three_point` (CPU error, not a silent substitute). See [Lighting](#lighting) |
 
 Static exports omit browser-only picking traces. Interactive HTML retains them.
 For comparable cube panels, pass the same explicit `--isovalue` rather than
 allowing each source to select its own percentile threshold.
+
+`--surface-material` chooses a Blinn–Phong preset for the CPU renderer.
+Omitting it, or passing `matte`, keeps the current default. `hard_plastic`
+and `metal_like` add visible highlights on ball-and-stick atoms and bonds and
+on cube isosurfaces. On a translucent surface those highlights are not
+multiplied by the surface opacity. `glass_like` adds a view-angle rim:
+the face-on center is clearer than `--isosurface-opacity`, and the silhouette
+stays more opaque and colored. Fully opaque atoms and bonds stay opaque.
+Element colors and isosurface phase or colormap colors stay. Isosurface
+opacity stays 0.55 unless `--isosurface-opacity` is set, and that value still
+scales `glass_like`. `metal` and `glass` are rejected. `hard_plastic`,
+`metal_like`, and `glass_like` with `--backend plotly` or `gpu` are rejected,
+because those backends do not draw the highlight. The array batch renderer
+does not evaluate these presets; use `--renderer general`, which is what
+`auto` selects for them.
+
+```bash
+mat-vis render structure.cif -o matte.png --backend cpu --renderer general
+mat-vis render structure.cif -o plastic.png --backend cpu --renderer general \
+  --surface-material hard_plastic
+mat-vis render structure.cif -o metal-like.png --backend cpu --renderer general \
+  --surface-material metal_like
+mat-vis render orbital.cube -o glass.png --backend cpu --renderer general \
+  --surface-material glass_like --isosurface-opacity 0.55
+```
 
 ### Camera
 
@@ -365,7 +414,9 @@ equal-area ties. Nonperiodic inputs fit the atomic coordinates and do not treat
 an ASE padding box as crystallographic data. Camera direction options are
 mutually exclusive. When `--no-cell` hides a real periodic cell, automatic
 framing likewise fits the visible atoms rather than hidden cell edges or vacuum
-padding.
+padding. Orthographic auto-fit includes each atom's rendered sphere radius, so
+`--style vdw` frames the van der Waals spheres and `--style ball` /
+`--style ball_stick` keep the compact display spheres.
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -411,8 +462,22 @@ near a face, edge, or corner. `--no-boundary-replicas` wraps every site into
 the half-open home cell and does not add those near-face copies. Ball-and-stick,
 stick, wireframe, and ORTEP still draw the periodic images required for a
 MolCrysKit bond that crosses a cell face, and every such stick ends on a
-displayed atom. `--style ball` and `--style space_filling` do not add those
-bond-context images. A Python caller can also pass
+displayed atom. `--style ball`, `--style space_filling`, and `--style vdw`
+do not add those bond-context images. `vdw` is its own representation. Its
+sphere radii come from MolCrysKit's van der Waals table, whose usual organic
+values are Bondi radii (A. Bondi, J. Phys. Chem. 1964, 68, 441; carbon is
+1.70 Å). `ball` and `space_filling` keep the compact display table in
+`colors.ATOM_RADIUS` (carbon is 0.18 Å before `--atom-scale`). `vdw` is not
+an alias of either. An element missing from the MolCrysKit table is an error.
+It is not replaced with a covalent radius or a compact display radius.
+`mck_overrides.vdw_radius_overrides` is a bond-perception setting. It is not
+how `--style vdw` chooses radii. Traces, both viewport fitters, and the
+oblique camera fit read that table once per sphere and multiply by
+`--atom-scale` once. `flat_illustration` is a representation: unlit
+filled atoms and stroke bonds, drawn with the default `material=mesh` and
+`--shading smooth`. It does not select `material=flat` (the billboard
+technique) or `--shading flat`. Those flags stay available on `ball_stick`.
+A Python caller can also pass
 `include_cross_boundary_bond_endpoints=False` (the viewer `wrap_into_cell`
 token does this together with `include_boundary_replicas=False`) to keep only
 the wrapped sites and omit the crossing sticks. Display does not change source
@@ -432,6 +497,28 @@ coordinates, bond identity, or the stored periodic shifts.
 | `--scale` | 2 | 1–4 | Supersampling factor (effective DPI = 72 × scale) |
 | `--sphere-detail LAT LON` | 12 20 | LAT >= 2, LON >= 3 | Sphere and ellipsoid mesh resolution |
 | `--cylinder-sides N` | 12 | N >= 3 | Bond-cylinder mesh resolution |
+
+### Lighting
+
+`--lighting` chooses the CPU rig. The default is `studio_soft`, the current
+camera-space direction `(-0.32, 0.42, 1.0)`. Omitting the flag is the same
+image. `unlit` turns shading off on the general CPU renderer (atoms, bonds,
+and isosurfaces). `studio_three_point` is a named multi-light contract: the
+CPU renderer raises and does not substitute `studio_soft`. Naming a rig
+without this flag does not change the picture.
+
+`studio_soft` is the publication default for ball-and-stick, orbitals,
+density, and Hirshfeld surfaces. `unlit` is for color-critical NCI/IRI plots,
+not the journal default for orbitals, density, or Hirshfeld.
+`--surface-material hard_plastic` or `metal_like` does not switch the rig.
+`--publication-style` stays rejected; it is not a lighting alias. Details:
+[`agents/lighting.md`](agents/lighting.md).
+
+```bash
+mat-vis render structure.cif -o soft.png --backend cpu --renderer general
+mat-vis render structure.cif -o flat.png --backend cpu --renderer general \
+  --lighting unlit
+```
 
 ### Selector-based mixed styles
 
@@ -516,7 +603,14 @@ draws one shell per full orientation. If the
 chosen policy still cannot produce at
 least four non-coplanar ligand points, `mat-vis render` exits with
 `mattervis.polyhedron-shell-error/v1` (nested in `mattervis.error/v1` under
-`--json`). The command does not invent ligand coordinates.
+`--json`). The command does not invent ligand coordinates. The same error
+is returned when four or more ligands are coplanar or collinear: Qhull
+cannot build a volume, and the command does not invent faces. The topology
+query keeps the reported coordination number and ligand coordinates, with
+empty hull simplices. `gap_info.rejection_reason` is `not_a_3d_polyhedron`
+when the ligand affine rank is below 3, and `qhull_numerical_failure` when
+the points span 3D and Qhull still cannot build the simplex. Non-finite
+coordinates use `qhull_numerical_failure` as well.
 
 `--cell-overlays` and `--bond-scale` require the general renderer. An explicit batch request fails instead of silently dropping either option.
 
@@ -525,7 +619,17 @@ least four non-coplanar ligand points, `mat-vis render` exits with
 
 ## `serve` — Browser viewer
 
-Requires `python -m pip install "matter-vis[web]"`; this extra includes Plotly.
+Requires `python -m pip install "matter-vis[web]"`; this extra includes Plotly
+and `dash>=2.18.2`.
+
+Dash 2.18.2 through 3.x accept only a string for `dcc.Tab.label`. Those
+releases show each scene name as that string and place the per-tab close
+control in `scene-tab-close-row`. Dash 4.0 and later accept a component
+label, and the close control sits inside the tab. Both presentations
+select a scene through `scene-tabs` and close it with the `tab-close`
+button. A `dash` extra with no lower bound lets an existing Dash 2.18.2
+install satisfy the dependency, build the component label, and replace
+the viewer with the layout error screen.
 
 ```
 mat-vis serve [options]

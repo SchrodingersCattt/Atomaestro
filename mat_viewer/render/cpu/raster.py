@@ -4,7 +4,6 @@ from __future__ import annotations
 import warnings
 
 from collections.abc import Iterable
-from dataclasses import dataclass
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
@@ -20,10 +19,30 @@ from ..contracts import (
     TriangleMeshPrimitive,
     ViewportPlan,
 )
+from ..isosurface_material import cpu_surface_from_metadata
+from ..lighting import STUDIO_SOFT_DIRECTION, lighting_id_for_cpu
+from ..surface_material import (
+    preserves_legacy_cylinder_shade,
+    shade_blinn_phong,
+)
+from .fragments import (
+    _DEPTH_EPSILON,
+    _Fragment,
+    _append_fragment,
+    _composite_fragments,
+    _rasterize_triangle,
+    _write_samples,
+)
 from .raster_lines import rasterize_lines as _rasterize_lines
-from .raster_math import _clip_polygon_attributes, _edge, _edge_array
-
-_DEPTH_EPSILON = 1.0e-9
+from .raster_math import _clip_polygon_attributes
+from .surface_shade import (
+    analytic_response,
+    evaluate_surface,
+    mesh_response_attributes,
+    phong_vertex_attributes,
+    split_blinn_phong,
+    uses_split_composite,
+)
 
 
 def _polyhedron_face_rgb(rgb: np.ndarray, lambert: float) -> np.ndarray:
@@ -34,14 +53,6 @@ def _polyhedron_face_rgb(rgb: np.ndarray, lambert: float) -> np.ndarray:
     if shade >= 1.0:
         return base + (1.0 - base) * min(shade - 1.0, 0.35)
     return base * max(shade, 0.55)
-
-
-@dataclass(frozen=True, slots=True)
-class _Fragment:
-    depth: float
-    order: int
-    source: str
-    rgba: tuple[float, float, float, float]
 
 
 def render_png(
@@ -86,6 +97,7 @@ def render_rgba(plan: RenderPlan, *, scale: int = 1) -> np.ndarray:
     if int(scale) <= 0:
         raise ValueError("scale must be positive")
     scale = int(scale)
+    lighting = lighting_id_for_cpu(plan.metadata)
     width, height = int(plan.width) * scale, int(plan.height) * scale
     background = np.asarray(plan.background, dtype=float)
     canvas = np.empty((height, width, 4), dtype=float)
@@ -101,6 +113,7 @@ def render_rgba(plan: RenderPlan, *, scale: int = 1) -> np.ndarray:
             local_height,
             background,
             line_scale=scale,
+            lighting=lighting,
         )
         depth_buffers[viewport.semantic_id] = z_buffer
         canvas[top:bottom, left:right] = local[: bottom - top, : right - left]
@@ -127,6 +140,7 @@ def _render_viewport(
     line_scale: int,
     initial_color: np.ndarray | None = None,
     initial_depth: np.ndarray | None = None,
+    lighting: str = "studio_soft",
 ) -> tuple[np.ndarray, np.ndarray]:
     transform = CameraTransform(viewport.camera, width, height)
     if initial_color is None:
@@ -163,6 +177,7 @@ def _render_viewport(
                     order_buffer,
                     fragments,
                     order,
+                    lighting=lighting,
                 )
             elif primitive.vertex_normals is not None and raster_shape == "cylinder":
                 _rasterize_cylinder(
@@ -173,6 +188,7 @@ def _render_viewport(
                     order_buffer,
                     fragments,
                     order,
+                    lighting=lighting,
                 )
             else:
                 _rasterize_mesh(
@@ -183,6 +199,7 @@ def _render_viewport(
                     order_buffer,
                     fragments,
                     order,
+                    lighting=lighting,
                 )
         elif isinstance(primitive, LinePrimitive):
             _rasterize_lines(
@@ -250,61 +267,6 @@ def composite_primitives(
     return output, composed_depth
 
 
-def _write_samples(
-    *,
-    pixel_x: np.ndarray,
-    pixel_y: np.ndarray,
-    pixel_depths: np.ndarray,
-    pixel_rgb: np.ndarray,
-    rgba: tuple[float, float, float, float],
-    pixel_alpha: np.ndarray | None = None,
-    source: str,
-    order: int,
-    color: np.ndarray,
-    z_buffer: np.ndarray,
-    order_buffer: np.ndarray,
-    fragments: dict[int, list[_Fragment]],
-) -> None:
-    # Keep the fast opaque path for ordinary primitives. Analytic overlays
-    # may supply a per-pixel alpha field for a native front/back depth cue.
-    if pixel_alpha is None and rgba[3] >= 1.0 - 1e-12:
-        existing = z_buffer[pixel_y, pixel_x]
-        existing_order = order_buffer[pixel_y, pixel_x]
-        wins = (pixel_depths < existing - _DEPTH_EPSILON) | (
-            (np.abs(pixel_depths - existing) <= _DEPTH_EPSILON)
-            & (order < existing_order)
-        )
-        if np.any(wins):
-            winner_y, winner_x = pixel_y[wins], pixel_x[wins]
-            z_buffer[winner_y, winner_x] = pixel_depths[wins]
-            order_buffer[winner_y, winner_x] = order
-            color[winner_y, winner_x, :3] = pixel_rgb[wins]
-            color[winner_y, winner_x, 3] = rgba[3]
-        return
-    width = z_buffer.shape[1]
-    alpha_values = (
-        np.asarray(pixel_alpha, dtype=float).reshape(-1)
-        if pixel_alpha is not None
-        else np.full(len(pixel_x), float(rgba[3]), dtype=float)
-    )
-    for x_value, y_value, depth, rgb, alpha_value in zip(
-        pixel_x, pixel_y, pixel_depths, pixel_rgb, alpha_values
-    ):
-        alpha_value = float(np.clip(alpha_value, 0.0, 1.0))
-        if alpha_value <= 1.0e-8:
-            continue
-        _append_fragment(
-            fragments,
-            int(y_value) * width + int(x_value),
-            _Fragment(
-                float(depth),
-                int(order),
-                source,
-                (float(rgb[0]), float(rgb[1]), float(rgb[2]), alpha_value),
-            ),
-        )
-
-
 def _rasterize_sphere(
     primitive: TriangleMeshPrimitive,
     transform: CameraTransform,
@@ -313,6 +275,8 @@ def _rasterize_sphere(
     order_buffer: np.ndarray,
     fragments: dict[int, list[_Fragment]],
     primitive_order: int,
+    *,
+    lighting: str = "studio_soft",
 ) -> None:
     center = np.asarray(primitive.metadata["_raster_center"], dtype=float)
     radius = float(primitive.metadata["_raster_radius"])
@@ -337,6 +301,7 @@ def _rasterize_sphere(
             order_buffer,
             fragments,
             primitive_order,
+            lighting=lighting,
         )
         return
     camera_center = transform.world_to_camera(center[None, :])[0]
@@ -425,25 +390,122 @@ def _rasterize_sphere(
     # to request a directional light without introducing a backend-specific
     # style option.
     metadata = primitive.metadata
+    surface = cpu_surface_from_metadata(metadata)
+    unlit = lighting == "unlit"
+    if not unlit and uses_split_composite(surface, primitive.rgba[3]):
+        view = (
+            np.array((0.0, 0.0, 1.0), dtype=float)
+            if transform.spec.projection == "orthographic"
+            else -hits
+        )
+        diffuse, specular, alpha_grid = analytic_response(
+            np.asarray(primitive.rgba[:3], dtype=float),
+            normals,
+            surface,
+            view,
+            float(primitive.rgba[3]),
+            two_sided=bool(metadata.get("_raster_two_sided", True)),
+        )
+        front_factor = metadata.get("_raster_alpha_front_factor")
+        back_factor = metadata.get("_raster_alpha_back_factor")
+        if front_factor is not None or back_factor is not None:
+            front_factor = float(front_factor if front_factor is not None else 1.0)
+            back_factor = float(back_factor if back_factor is not None else 1.0)
+            frontness = np.clip(normals[..., 2], -1.0, 1.0)
+            blend = 0.5 * (frontness + 1.0)
+            alpha_grid = np.clip(
+                alpha_grid * (back_factor + (front_factor - back_factor) * blend),
+                0.0,
+                1.0,
+            )
+        local_y, local_x = np.nonzero(inside)
+        _write_samples(
+            pixel_x=local_x + minimum_x,
+            pixel_y=local_y + minimum_y,
+            pixel_depths=depth_values[local_y, local_x],
+            pixel_rgb=np.clip(diffuse[local_y, local_x], 0.0, 1.0),
+            pixel_specular=np.maximum(specular[local_y, local_x], 0.0),
+            pixel_alpha=alpha_grid[local_y, local_x],
+            rgba=primitive.rgba,
+            source=primitive.semantic_id,
+            order=primitive_order * 1_000_000,
+            color=color,
+            z_buffer=z_buffer,
+            order_buffer=order_buffer,
+            fragments=fragments,
+        )
+        return
+    if not unlit and surface is not None and surface.specular > 0.0:
+        if transform.spec.projection == "orthographic":
+            rgb_values = shade_blinn_phong(
+                np.asarray(primitive.rgba[:3], dtype=float),
+                normals,
+                surface,
+                two_sided=bool(metadata.get("_raster_two_sided", True)),
+            )
+        else:
+            diffuse, specular, _alpha = evaluate_surface(
+                np.asarray(primitive.rgba[:3], dtype=float),
+                normals,
+                -hits,
+                surface,
+                base_alpha=float(primitive.rgba[3]),
+                two_sided=bool(metadata.get("_raster_two_sided", True)),
+                view_is_direction=True,
+            )
+            rgb_values = diffuse + specular
+        front_factor = metadata.get("_raster_alpha_front_factor")
+        back_factor = metadata.get("_raster_alpha_back_factor")
+        pixel_alpha = None
+        if front_factor is not None or back_factor is not None:
+            front_factor = float(front_factor if front_factor is not None else 1.0)
+            back_factor = float(back_factor if back_factor is not None else 1.0)
+            frontness = np.clip(normals[..., 2], -1.0, 1.0)
+            blend = 0.5 * (frontness + 1.0)
+            alpha_factor = back_factor + (front_factor - back_factor) * blend
+            pixel_alpha = np.clip(float(primitive.rgba[3]) * alpha_factor, 0.0, 1.0)
+        local_y, local_x = np.nonzero(inside)
+        _write_samples(
+            pixel_x=local_x + minimum_x,
+            pixel_y=local_y + minimum_y,
+            pixel_depths=depth_values[local_y, local_x],
+            pixel_rgb=np.clip(rgb_values[local_y, local_x], 0.0, 1.0),
+            rgba=primitive.rgba,
+            pixel_alpha=None if pixel_alpha is None else pixel_alpha[local_y, local_x],
+            source=primitive.semantic_id,
+            order=primitive_order * 1_000_000,
+            color=color,
+            z_buffer=z_buffer,
+            order_buffer=order_buffer,
+            fragments=fragments,
+        )
+        return
     light = np.asarray(
-        metadata.get("_raster_light", (-0.32, 0.42, 1.0)), dtype=float
+        metadata.get("_raster_light", STUDIO_SOFT_DIRECTION), dtype=float
     )
     if light.shape != (3,) or not np.all(np.isfinite(light)):
-        light = np.asarray((-0.32, 0.42, 1.0), dtype=float)
+        light = np.asarray(STUDIO_SOFT_DIRECTION, dtype=float)
     light /= max(float(np.linalg.norm(light)), 1.0e-12)
-    ambient = float(metadata.get("_raster_ambient", 0.68))
-    diffuse = float(metadata.get("_raster_diffuse", 0.32))
+    if surface is not None:
+        ambient = float(surface.ambient)
+        diffuse = float(surface.diffuse)
+    else:
+        ambient = float(metadata.get("_raster_ambient", 0.68))
+        diffuse = float(metadata.get("_raster_diffuse", 0.32))
     ambient = float(np.clip(ambient, 0.0, 1.0))
     diffuse = float(np.clip(diffuse, 0.0, 1.0))
     total_light = ambient + diffuse
     if total_light > 1.0:
         ambient /= total_light
         diffuse /= total_light
-    if bool(metadata.get("_raster_two_sided", True)):
+    if unlit:
+        illumination = np.ones(normals.shape[:-1], dtype=float)
+    elif bool(metadata.get("_raster_two_sided", True)):
         cosine = np.abs(normals @ light)
+        illumination = ambient + diffuse * cosine
     else:
         cosine = np.clip(normals @ light, 0.0, 1.0)
-    illumination = ambient + diffuse * cosine
+        illumination = ambient + diffuse * cosine
     base_rgb = np.asarray(primitive.rgba[:3])[None, None, :]
     rgb_values = base_rgb * illumination[..., None]
     # Optional native specular cue for geometric overlays.  This is evaluated
@@ -451,6 +513,8 @@ def _rasterize_sphere(
     # survives alpha compositing on white while retaining the exact circular
     # silhouette.  Existing atom-marker spheres keep the zero default.
     specular = float(np.clip(metadata.get("_raster_specular", 0.0), 0.0, 1.0))
+    if unlit:
+        specular = 0.0
     if specular > 0.0:
         shininess = float(np.clip(metadata.get("_raster_shininess", 32.0), 1.0, 256.0))
         camera_view = np.array((0.0, 0.0, 1.0), dtype=float)
@@ -488,6 +552,25 @@ def _rasterize_sphere(
     )
 
 
+def _cylinder_view(transform, grid_x, grid_y, depth):
+    """Direction toward the camera. Orthographic cylinders keep ``+Z``."""
+
+    if transform.spec.projection == "orthographic":
+        return np.array((0.0, 0.0, 1.0), dtype=float)
+    ndc_x = 2.0 * grid_x / transform.width - 1.0
+    ndc_y = 1.0 - 2.0 * grid_y / transform.height
+    focal = 1.0 / np.tan(np.radians(float(transform.spec.fov_y_deg)) * 0.5)
+    camera_z = -np.asarray(depth, dtype=float)
+    return -np.stack(
+        (
+            ndc_x * (-camera_z) * transform.aspect / focal,
+            ndc_y * (-camera_z) / focal,
+            camera_z,
+        ),
+        axis=-1,
+    )
+
+
 def _rasterize_cylinder(
     primitive: TriangleMeshPrimitive,
     transform: CameraTransform,
@@ -496,6 +579,8 @@ def _rasterize_cylinder(
     order_buffer: np.ndarray,
     fragments: dict[int, list[_Fragment]],
     primitive_order: int,
+    *,
+    lighting: str = "studio_soft",
 ) -> None:
     endpoints = np.asarray(
         [primitive.metadata["_raster_start"], primitive.metadata["_raster_end"]],
@@ -567,8 +652,57 @@ def _rasterize_cylinder(
     )
     if not np.any(inside):
         return
-    illumination = 0.72 + 0.28 * radial
-    rgb_values = np.asarray(primitive.rgba[:3])[None, None, :] * illumination[..., None]
+    base_rgb = np.asarray(primitive.rgba[:3], dtype=float)
+    surface = cpu_surface_from_metadata(primitive.metadata)
+    unlit = lighting == "unlit"
+    if not unlit and uses_split_composite(surface, primitive.rgba[3]):
+        offset_x = (grid_x - closest_x) / half_width
+        offset_y = (grid_y - closest_y) / half_width
+        cylinder_normals = np.stack((offset_x, -offset_y, radial), axis=-1)
+        diffuse, specular, alpha_grid = analytic_response(
+            base_rgb,
+            cylinder_normals,
+            surface,
+            _cylinder_view(transform, grid_x, grid_y, depth_values),
+            float(primitive.rgba[3]),
+        )
+        local_y, local_x = np.nonzero(inside)
+        _write_samples(
+            pixel_x=local_x + minimum_x,
+            pixel_y=local_y + minimum_y,
+            pixel_depths=depth_values[local_y, local_x],
+            pixel_rgb=np.clip(diffuse[local_y, local_x], 0.0, 1.0),
+            pixel_specular=np.maximum(specular[local_y, local_x], 0.0),
+            pixel_alpha=alpha_grid[local_y, local_x],
+            rgba=primitive.rgba,
+            source=primitive.semantic_id,
+            order=primitive_order * 1_000_000,
+            color=color,
+            z_buffer=z_buffer,
+            order_buffer=order_buffer,
+            fragments=fragments,
+        )
+        return
+    # Matte keeps the screen-space radial bond shade; specular presets use Blinn–Phong.
+    if unlit:
+        rgb_values = np.broadcast_to(base_rgb, radial.shape + (3,)).astype(float, copy=True)
+    elif surface is None or preserves_legacy_cylinder_shade(surface):
+        illumination = 0.72 + 0.28 * radial
+        rgb_values = base_rgb[None, None, :] * illumination[..., None]
+    else:
+        offset_x = (grid_x - closest_x) / half_width
+        offset_y = (grid_y - closest_y) / half_width
+        cylinder_normals = np.stack((offset_x, -offset_y, radial), axis=-1)
+        if transform.spec.projection == "orthographic":
+            rgb_values = shade_blinn_phong(base_rgb, cylinder_normals, surface)
+        else:
+            diffuse, specular = split_blinn_phong(
+                base_rgb,
+                cylinder_normals,
+                surface,
+                view=_cylinder_view(transform, grid_x, grid_y, depth_values),
+            )
+            rgb_values = diffuse + specular
     local_y, local_x = np.nonzero(inside)
     _write_samples(
         pixel_x=local_x + minimum_x,
@@ -593,14 +727,28 @@ def _rasterize_mesh(
     order_buffer: np.ndarray,
     fragments: dict[int, list[_Fragment]],
     primitive_order: int,
+    *,
+    lighting: str = "studio_soft",
 ) -> None:
     camera_vertices = transform.world_to_camera(primitive.vertices)
     rotation = transform.view_matrix[:3, :3]
-    light = np.asarray([-0.32, 0.42, 1.0], dtype=float)
+    unlit = lighting == "unlit"
+    light = np.asarray(STUDIO_SOFT_DIRECTION, dtype=float)
     light /= np.linalg.norm(light)
     material = primitive.metadata.get("material", {})
     ambient = float(material.get("ambient", 0.68))
     diffuse = float(material.get("diffuse", 0.32))
+    surface = cpu_surface_from_metadata(primitive.metadata)
+    split_response = (not unlit) and uses_split_composite(surface, primitive.rgba[3])
+    orthographic = transform.spec.projection == "orthographic"
+    phong_mesh = (not unlit) and primitive.vertex_normals is not None and surface is not None and (
+        surface.specular > 0.0
+        or surface.modulates_opacity()
+        or surface.fresnel_albedo > 0.0
+    )
+    if surface is not None and surface.specular <= 0.0:
+        ambient = float(surface.ambient)
+        diffuse = float(surface.diffuse)
     triangle_indices = np.asarray(primitive.triangles, dtype=int)
     if len(triangle_indices) == 0:
         return
@@ -628,8 +776,25 @@ def _rasterize_mesh(
         camera_vertex_normals /= np.maximum(
             np.linalg.norm(camera_vertex_normals, axis=1, keepdims=True), 1e-12
         )
-        vertex_illumination = ambient + diffuse * np.abs(camera_vertex_normals @ light)
-        vertex_rgb_all = shaded_base * vertex_illumination[:, None]
+        if unlit:
+            vertex_rgb_all = np.array(shaded_base, dtype=float, copy=True)
+            if vertex_rgb_all.shape == (3,):
+                vertex_rgb_all = np.broadcast_to(
+                    vertex_rgb_all, (len(camera_vertex_normals), 3)
+                ).copy()
+        elif phong_mesh:
+            vertex_rgb_all = phong_vertex_attributes(
+                camera_vertex_normals, shaded_base, camera_vertices
+            )
+        elif surface is not None and surface.specular > 0.0:
+            vertex_rgb_all = shade_blinn_phong(
+                shaded_base, camera_vertex_normals, surface
+            )
+        else:
+            vertex_illumination = ambient + diffuse * np.abs(
+                camera_vertex_normals @ light
+            )
+            vertex_rgb_all = shaded_base * vertex_illumination[:, None]
     rgba = (*primitive.rgba[:3], float(primitive.rgba[3]))
     for triangle_index, indices in enumerate(primitive.triangles):
         if normal_lengths[triangle_index] < 1e-14:
@@ -639,7 +804,36 @@ def _rasterize_mesh(
             and float(camera_normals[triangle_index, 2]) <= 0.0
         ):
             continue
-        if vertex_rgb_all is None:
+        if unlit and vertex_rgb_all is None:
+            if primitive.vertex_colors is None:
+                triangle_rgb = np.tile(np.asarray(primitive.rgba[:3], dtype=float), (3, 1))
+            else:
+                triangle_rgb = np.array(shaded_base[indices], dtype=float, copy=True)
+        elif vertex_rgb_all is None and split_response:
+            if primitive.vertex_colors is None:
+                base = np.asarray(primitive.rgba[:3], dtype=float)
+            else:
+                base = shaded_base[indices]
+            triangle_rgb = mesh_response_attributes(
+                base,
+                np.repeat(camera_normals[triangle_index][None, :], 3, axis=0),
+                camera_vertices[indices],
+                surface,
+                orthographic=orthographic,
+                base_alpha=float(primitive.rgba[3]),
+            )
+        elif vertex_rgb_all is None and surface is not None and surface.specular > 0.0:
+            if primitive.vertex_colors is None:
+                base = np.asarray(primitive.rgba[:3], dtype=float)
+            else:
+                base = shaded_base[indices]
+            triangle_rgb = np.asarray(
+                shade_blinn_phong(base, camera_normals[triangle_index], surface),
+                dtype=float,
+            )
+            if triangle_rgb.shape == (3,):
+                triangle_rgb = np.tile(triangle_rgb, (3, 1))
+        elif vertex_rgb_all is None:
             lambert = abs(float(camera_normals[triangle_index] @ light))
             if (
                 primitive.vertex_colors is None
@@ -670,6 +864,8 @@ def _rasterize_mesh(
                 z_buffer=z_buffer,
                 order_buffer=order_buffer,
                 fragments=fragments,
+                phong=surface if np.shape(triangle_rgb)[-1] == 9 else None,
+                orthographic=orthographic,
             )
             continue
         camera_triangle = camera_vertices[indices]
@@ -705,149 +901,10 @@ def _rasterize_mesh(
                 z_buffer=z_buffer,
                 order_buffer=order_buffer,
                 fragments=fragments,
+                phong=surface if np.shape(vertex_rgb)[-1] == 9 else None,
+                orthographic=orthographic,
             )
 
-
-def _rasterize_triangle(
-    xy: np.ndarray,
-    depths: np.ndarray,
-    rgba: tuple[float, float, float, float],
-    vertex_rgb: np.ndarray | None,
-    source: str,
-    order: int,
-    *,
-    perspective: bool,
-    color: np.ndarray,
-    z_buffer: np.ndarray,
-    order_buffer: np.ndarray,
-    fragments: dict[int, list[_Fragment]],
-) -> None:
-    height, width = z_buffer.shape
-    area = _edge(xy[0], xy[1], xy[2])
-    if abs(area) < 1e-12:
-        return
-    minimum_x = max(0, int(np.floor(float(xy[:, 0].min()) - 0.5)))
-    maximum_x = min(width - 1, int(np.ceil(float(xy[:, 0].max()) - 0.5)))
-    minimum_y = max(0, int(np.floor(float(xy[:, 1].min()) - 0.5)))
-    maximum_y = min(height - 1, int(np.ceil(float(xy[:, 1].max()) - 0.5)))
-    if minimum_x > maximum_x or minimum_y > maximum_y:
-        return
-    xs = np.arange(minimum_x, maximum_x + 1, dtype=float) + 0.5
-    ys = np.arange(minimum_y, maximum_y + 1, dtype=float) + 0.5
-    grid_x, grid_y = np.meshgrid(xs, ys)
-    points = np.stack((grid_x, grid_y), axis=-1)
-    weight0 = _edge_array(xy[1], xy[2], points) / area
-    weight1 = _edge_array(xy[2], xy[0], points) / area
-    weight2 = 1.0 - weight0 - weight1
-    tolerance = -1e-10
-    inside = (weight0 >= tolerance) & (weight1 >= tolerance) & (weight2 >= tolerance)
-    if not np.any(inside):
-        return
-    if perspective:
-        reciprocal = weight0 / depths[0] + weight1 / depths[1] + weight2 / depths[2]
-        depth_values = 1.0 / np.maximum(reciprocal, 1e-15)
-        if vertex_rgb is not None:
-            rgb_values = (
-                weight0[..., None] * vertex_rgb[0] / depths[0]
-                + weight1[..., None] * vertex_rgb[1] / depths[1]
-                + weight2[..., None] * vertex_rgb[2] / depths[2]
-            ) / np.maximum(reciprocal[..., None], 1e-15)
-        else:
-            rgb_values = np.empty((*weight0.shape, 3), dtype=float)
-            rgb_values[...] = rgba[:3]
-    else:
-        depth_values = weight0 * depths[0] + weight1 * depths[1] + weight2 * depths[2]
-        if vertex_rgb is not None:
-            rgb_values = (
-                weight0[..., None] * vertex_rgb[0]
-                + weight1[..., None] * vertex_rgb[1]
-                + weight2[..., None] * vertex_rgb[2]
-            )
-        else:
-            rgb_values = np.empty((*weight0.shape, 3), dtype=float)
-            rgb_values[...] = rgba[:3]
-    local_y, local_x = np.nonzero(inside)
-    pixel_x = local_x + minimum_x
-    pixel_y = local_y + minimum_y
-    pixel_depths = depth_values[local_y, local_x]
-    pixel_rgb = np.clip(rgb_values[local_y, local_x], 0.0, 1.0)
-    if rgba[3] >= 1.0 - 1e-12:
-        existing = z_buffer[pixel_y, pixel_x]
-        existing_order = order_buffer[pixel_y, pixel_x]
-        wins = (pixel_depths < existing - _DEPTH_EPSILON) | (
-            (np.abs(pixel_depths - existing) <= _DEPTH_EPSILON)
-            & (order < existing_order)
-        )
-        if np.any(wins):
-            winner_y, winner_x = pixel_y[wins], pixel_x[wins]
-            z_buffer[winner_y, winner_x] = pixel_depths[wins]
-            order_buffer[winner_y, winner_x] = order
-            color[winner_y, winner_x, :3] = pixel_rgb[wins]
-            color[winner_y, winner_x, 3] = rgba[3]
-    else:
-        for x_value, y_value, depth, rgb in zip(
-            pixel_x, pixel_y, pixel_depths, pixel_rgb
-        ):
-            _append_fragment(
-                fragments,
-                int(y_value) * width + int(x_value),
-                _Fragment(
-                    float(depth),
-                    int(order),
-                    source,
-                    (float(rgb[0]), float(rgb[1]), float(rgb[2]), rgba[3]),
-                ),
-            )
-
-
-def _append_fragment(
-    fragments: dict[int, list[_Fragment]],
-    pixel: int,
-    fragment: _Fragment,
-) -> None:
-    bucket = fragments.setdefault(pixel, [])
-    # Adjacent triangles of one continuous surface may both cover a shared
-    # sample.  Retain one surface hit while preserving distinct front/back
-    # intersections of a transparent closed mesh.
-    for existing in bucket:
-        if (
-            existing.source == fragment.source
-            and abs(existing.depth - fragment.depth) <= _DEPTH_EPSILON
-        ):
-            return
-    bucket.append(fragment)
-
-
-def _composite_fragments(
-    color: np.ndarray,
-    z_buffer: np.ndarray,
-    fragments: dict[int, list[_Fragment]],
-) -> None:
-    height, width = z_buffer.shape
-    for pixel in sorted(fragments):
-        y_value, x_value = divmod(pixel, width)
-        opaque_depth = z_buffer[y_value, x_value]
-        visible = [
-            fragment
-            for fragment in fragments[pixel]
-            if fragment.depth < opaque_depth - _DEPTH_EPSILON
-            or not np.isfinite(opaque_depth)
-        ]
-        visible.sort(key=lambda item: (-item.depth, item.order, item.source))
-        destination = color[y_value, x_value].copy()
-        for fragment in visible:
-            source = np.asarray(fragment.rgba, dtype=float)
-            source_alpha = source[3]
-            output_alpha = source_alpha + destination[3] * (1.0 - source_alpha)
-            if output_alpha <= 1e-15:
-                destination[:] = 0.0
-            else:
-                destination[:3] = (
-                    source[:3] * source_alpha
-                    + destination[:3] * destination[3] * (1.0 - source_alpha)
-                ) / output_alpha
-                destination[3] = output_alpha
-        color[y_value, x_value] = destination
 
 
 def _draw_text(

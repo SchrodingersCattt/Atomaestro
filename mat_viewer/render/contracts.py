@@ -16,6 +16,15 @@ from typing import Any, Literal, Mapping, TypeAlias
 
 import numpy as np
 
+from .isosurface_material import (
+    DEFAULT_AMBIENT,
+    DEFAULT_DIFFUSE,
+    DEFAULT_SHININESS,
+    DEFAULT_SPECULAR,
+    preset_material,
+)
+from .representations import REPRESENTATIONS
+
 Projection = Literal["orthographic", "perspective"]
 Backend = Literal["cpu", "matplotlib", "plotly", "gpu"]
 DisplayMode = Literal["formula_unit", "unit_cell", "asymmetric_unit", "cluster"]
@@ -208,12 +217,25 @@ class RenderSpec:
     isosurface_positive_color: str = "#D55E00"
     isosurface_negative_color: str = "#0072B2"
     isosurface_stride: int = 2
-    isosurface_ambient: float = 0.68
-    isosurface_diffuse: float = 0.32
+    isosurface_smooth: bool = False
+    # None means the caller omitted the coefficient. A number is explicit
+    # even when it equals the historical default, so a preset cannot
+    # silently replace RenderSpec(..., isosurface_ambient=0.68).
+    isosurface_ambient: float | None = None
+    isosurface_diffuse: float | None = None
+    isosurface_specular: float | None = None
+    isosurface_shininess: float | None = None
+    isosurface_material: str | None = None
     isosurface_color_cube: str | None = None
     isosurface_color_range: tuple[float, float] | None = None
     isosurface_color_center: float | None = None
     isosurface_colormap: str = "bgr"
+    # Lighting rig. This is not style["material"] (mesh versus flat) and not
+    # a surface-material preset. studio_soft is the historical camera light.
+    lighting: str = "studio_soft"
+    # Blinn–Phong preset. None keeps today's per-primitive shade.
+    # This is not style["material"], which remains mesh versus flat.
+    surface_material: str | None = None
 
     def __post_init__(self) -> None:
         if self.backend not in ("cpu", "matplotlib", "plotly", "gpu"):
@@ -225,14 +247,7 @@ class RenderSpec:
             for value in (self.width, self.height, self.scale)
         ):
             raise ValueError("width, height, and scale must be positive integers")
-        if self.representation not in {
-            "ball_stick",
-            "ball",
-            "space_filling",
-            "stick",
-            "wireframe",
-            "ortep",
-        }:
+        if self.representation not in REPRESENTATIONS:
             raise ValueError("unknown representation")
         if self.shading not in {"smooth", "flat"}:
             raise ValueError("unknown shading")
@@ -276,16 +291,45 @@ class RenderSpec:
             raise ValueError("isosurface_opacity must lie in [0, 1]")
         if int(self.isosurface_stride) != self.isosurface_stride or int(self.isosurface_stride) <= 0:
             raise ValueError("isosurface_stride must be a positive integer")
+        if not isinstance(self.isosurface_smooth, bool):
+            raise TypeError("isosurface_smooth must be a bool")
+        light_defaults = {
+            "isosurface_ambient": DEFAULT_AMBIENT,
+            "isosurface_diffuse": DEFAULT_DIFFUSE,
+            "isosurface_specular": DEFAULT_SPECULAR,
+            "isosurface_shininess": DEFAULT_SHININESS,
+        }
+        if self.isosurface_material is not None:
+            conflicts = [
+                name for name in light_defaults if getattr(self, name) is not None
+            ]
+            if conflicts:
+                raise ValueError(
+                    "isosurface_material replaces the light coefficients; "
+                    "do not also set "
+                    + ", ".join(conflicts)
+                )
+            preset = preset_material(self.isosurface_material)
+            object.__setattr__(self, "isosurface_ambient", preset.ambient)
+            object.__setattr__(self, "isosurface_diffuse", preset.diffuse)
+            object.__setattr__(self, "isosurface_specular", preset.specular)
+            object.__setattr__(self, "isosurface_shininess", preset.shininess)
+        else:
+            for name, default in light_defaults.items():
+                if getattr(self, name) is None:
+                    object.__setattr__(self, name, default)
         for name, value in (
             ("isosurface_ambient", self.isosurface_ambient),
             ("isosurface_diffuse", self.isosurface_diffuse),
+            ("isosurface_specular", self.isosurface_specular),
         ):
             if not np.isfinite(value) or float(value) < 0.0:
                 raise ValueError(f"{name} must be finite and non-negative")
-        if float(self.isosurface_ambient) + float(self.isosurface_diffuse) > 1.0:
-            raise ValueError(
-                "isosurface_ambient + isosurface_diffuse must not exceed 1"
-            )
+        if (
+            not np.isfinite(self.isosurface_shininess)
+            or float(self.isosurface_shininess) < 1.0
+        ):
+            raise ValueError("isosurface_shininess must be finite and at least 1")
         if self.isosurface_color_range is not None:
             low, high = self.isosurface_color_range
             if not np.isfinite(low) or not np.isfinite(high) or high <= low:
@@ -302,6 +346,29 @@ class RenderSpec:
             or int(self.cylinder_sides) < 3
         ):
             raise ValueError("cylinder_sides must be at least 3")
+        from .lighting import get_lighting_rig
+
+        object.__setattr__(self, "lighting", get_lighting_rig(self.lighting).id)
+        if self.surface_material is not None:
+            from .surface_material import (
+                CPU_ONLY_SURFACE_MATERIALS,
+                resolve_surface_material,
+            )
+
+            resolved = resolve_surface_material(
+                str(self.surface_material),
+                ambient=self.isosurface_ambient,
+                diffuse=self.isosurface_diffuse,
+            )
+            object.__setattr__(self, "surface_material", resolved.id)
+            if resolved.id in CPU_ONLY_SURFACE_MATERIALS and self.backend in {
+                "plotly",
+                "gpu",
+            }:
+                raise ValueError(
+                    f"surface material {resolved.id!r} is drawn only by the CPU "
+                    f"renderer; backend {self.backend!r} would not show the highlight"
+                )
 
 
 @dataclass(frozen=True, slots=True)

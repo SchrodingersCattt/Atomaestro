@@ -261,6 +261,14 @@ def _validate_render_options(args: argparse.Namespace) -> None:
         bond_thresholds_from_args(args)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"--bond-threshold is invalid: {exc}") from exc
+    from .surface_material import CPU_ONLY_SURFACE_MATERIALS
+
+    preset = getattr(args, "surface_material", None)
+    if preset in CPU_ONLY_SURFACE_MATERIALS and args.backend in {"plotly", "gpu"}:
+        raise ValueError(
+            f"--surface-material {preset} is drawn only by the CPU renderer; "
+            f"--backend {args.backend} would not show the highlight"
+        )
     unsupported: list[str] = []
     if args.monochrome:
         unsupported.append("--monochrome")
@@ -510,19 +518,65 @@ def add_isosurface_arguments(parser: argparse.ArgumentParser) -> None:
         "--isosurface-stride",
         type=int,
         default=2,
-        help="Cube grid stride for isosurface extraction.",
+        help=(
+            "Cube grid stride for marching cubes (default: 2). "
+            "Pass 1 with --isosurface-smooth for the fine publication mesh."
+        ),
+    )
+    parser.add_argument(
+        "--isosurface-smooth",
+        dest="isosurface_smooth",
+        action="store_true",
+        help=(
+            "Taubin-smooth CPU isosurface meshes after marching cubes. "
+            "Off by default. Does not change the isovalue."
+        ),
+    )
+    parser.add_argument(
+        "--no-isosurface-smooth",
+        dest="isosurface_smooth",
+        action="store_false",
+        help="Keep the raw marching-cubes mesh, without Taubin smoothing.",
+    )
+    parser.set_defaults(isosurface_smooth=False)
+    parser.add_argument(
+        "--isosurface-material",
+        default=None,
+        help=(
+            "Surface-material id copied onto the isosurface from the "
+            "surface-material library. Do not combine with the individual "
+            "light coefficients. Opacity stays a separate flag."
+        ),
     )
     parser.add_argument(
         "--isosurface-ambient",
         type=float,
-        default=0.68,
-        help="Cube isosurface ambient-light coefficient (default: 0.68).",
+        default=None,
+        help=(
+            "Cube isosurface ambient weight (default: 0.68). Independent of "
+            "diffuse; the sum is not required to be 1."
+        ),
     )
     parser.add_argument(
         "--isosurface-diffuse",
         type=float,
-        default=0.32,
-        help="Cube isosurface diffuse-light coefficient (default: 0.32).",
+        default=None,
+        help=(
+            "Cube isosurface diffuse weight (default: 0.32). Independent of "
+            "ambient."
+        ),
+    )
+    parser.add_argument(
+        "--isosurface-specular",
+        type=float,
+        default=None,
+        help="Cube isosurface specular weight (default: 0).",
+    )
+    parser.add_argument(
+        "--isosurface-shininess",
+        type=float,
+        default=None,
+        help="Cube isosurface specular exponent, at least 1 (default: 32).",
     )
     parser.add_argument(
         "--isosurface-color-cube",
@@ -563,20 +617,44 @@ def add_isosurface_arguments(parser: argparse.ArgumentParser) -> None:
 
 def isosurface_render_fields(args: argparse.Namespace) -> dict[str, object]:
     """Return the RenderSpec isosurface fields stored on ``args``."""
+    from .isosurface_material import resolve_isosurface_material
+
     color_range = args.isosurface_color_range
+    preset = args.isosurface_material
+    resolved = resolve_isosurface_material(
+        preset,
+        ambient=args.isosurface_ambient,
+        diffuse=args.isosurface_diffuse,
+        specular=args.isosurface_specular,
+        shininess=args.isosurface_shininess,
+        opacity=(
+            args.isosurface_opacity if args.isosurface_opacity is not None else 0.55
+        ),
+    )
+    # A preset owns the light coefficients. Passing the resolved numbers
+    # back into RenderSpec would look like an explicit second request.
+    coefficients = (
+        {}
+        if preset is not None
+        else {
+            "isosurface_ambient": resolved.ambient,
+            "isosurface_diffuse": resolved.diffuse,
+            "isosurface_specular": resolved.specular,
+            "isosurface_shininess": resolved.shininess,
+        }
+    )
     return {
         "isosurface_mode": args.isosurface_mode,
         "isosurface_wireframe_width": args.isosurface_wireframe_width,
         "isosurface_wireframe_opacity": args.isosurface_wireframe_opacity,
         "isosurface_isovalue": args.isovalue,
-        "isosurface_opacity": (
-            args.isosurface_opacity if args.isosurface_opacity is not None else 0.55
-        ),
+        "isosurface_opacity": resolved.opacity,
         "isosurface_positive_color": args.isosurface_positive_color,
         "isosurface_negative_color": args.isosurface_negative_color,
         "isosurface_stride": args.isosurface_stride,
-        "isosurface_ambient": args.isosurface_ambient,
-        "isosurface_diffuse": args.isosurface_diffuse,
+        "isosurface_smooth": bool(args.isosurface_smooth),
+        **coefficients,
+        "isosurface_material": preset,
         "isosurface_color_cube": args.isosurface_color_cube,
         "isosurface_color_range": (
             None if color_range is None else (float(color_range[0]), float(color_range[1]))

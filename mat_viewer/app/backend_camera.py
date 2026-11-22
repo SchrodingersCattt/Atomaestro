@@ -6,7 +6,6 @@ import plotly.graph_objects as go
 from .shared import *
 from .camera_helpers import *
 from .style_helpers import *
-from .backend_core import FIGURE_CACHE_MAX
 
 
 def _figure_from_cached_dict(cached_dict: dict) -> go.Figure:
@@ -247,7 +246,7 @@ class _CameraBackendMixin:
             with self._figure_cache_lock:
                 cached_entry = self._figure_cache.get(cache_key)
                 if cached_entry is not None:
-                    self._figure_cache.move_to_end(cache_key)
+                    self._figure_cache.touch(cache_key)
         if cached_entry is not None:
             cached_fig_dict, cached_topology = cached_entry
             fig = _figure_from_cached_dict(cached_fig_dict)
@@ -290,6 +289,7 @@ class _CameraBackendMixin:
                 camera = self._layout_camera(state, scene_for_overlay, style_for_overlay)
                 if camera:
                     fig.update_layout(scene_camera=camera)
+                apply_fitted_axis_layout(fig, scene_for_overlay, style_for_overlay)
             except Exception:  # pragma: no cover - defensive, fall back to verbatim cache
                 pass
             # Phase 6: spec-level ``enabled`` is patched onto trace
@@ -411,10 +411,9 @@ class _CameraBackendMixin:
                 existing = self._figure_cache.get(cache_key)
                 if existing is None:
                     existing = (fig.to_plotly_json(), topology_data)
-                    self._figure_cache[cache_key] = existing
-                    while len(self._figure_cache) > FIGURE_CACHE_MAX:
-                        self._figure_cache.popitem(last=False)
-                self._figure_cache.move_to_end(cache_key)
+                    self._figure_cache.remember(cache_key, existing)
+                else:
+                    self._figure_cache.touch(cache_key)
             if existing[1] is not topology_data:
                 fig = _figure_from_cached_dict(existing[0])
                 topology_data = existing[1]
@@ -528,9 +527,9 @@ class _CameraBackendMixin:
                 xaxis=dict(visible=False),
                 yaxis=dict(visible=False),
                 zaxis=dict(visible=False),
-                bgcolor="white",
+                bgcolor=FLAT_ORTEP_SCENE_BACKGROUND,
                 dragmode="orbit",
-                camera=camera or _plotly_camera(scene.get("camera")),
+                camera=_flat_ortep_layout_camera(camera, scene),
                 uirevision=style.get("uirevision", "flat-ortep"),
             ),
             xaxis=dict(visible=False, range=[0, 1]),
@@ -799,10 +798,10 @@ class _CameraBackendMixin:
             camera = self.default_camera(state)
             revision = int(state.get("camera_revision", 0) or 0) + 1
             self.patch_state(
-                {"camera": camera, "camera_revision": revision},
-                scene_id=scene_id,
-                broadcast=broadcast,
+                {"camera": camera, "camera_revision": revision, "camera_aspect_scale": 1.0, "fit_axis_ranges": None},
+                scene_id=scene_id, broadcast=False,
             )
+            publish_framed_camera(self, scene_id, broadcast=broadcast, command="reset")
             return self.get_camera(scene_id)
 
         if action == "align":
@@ -817,20 +816,14 @@ class _CameraBackendMixin:
 
         if action == "fit":
             state = self.get_state(scene_id)
-            camera = self.default_camera(state)
-            # Plotly uses unitless eye vectors against the already fixed
-            # world-cube ranges; 1.55 fills most structures without clipping.
-            eye = camera.get("eye", {})
-            norm = np.linalg.norm([eye.get("x", 0.0), eye.get("y", 0.0), eye.get("z", 0.0)])
-            if norm > 1e-8:
-                scale = 1.55 / norm
-                camera["eye"] = {axis: float(eye.get(axis, 0.0)) * scale for axis in ("x", "y", "z")}
+            camera, scale, ranges = framed_fit_camera(self, state, payload)
             revision = int(state.get("camera_revision", 0) or 0) + 1
             self.patch_state(
-                {"camera": camera, "camera_revision": revision},
-                scene_id=scene_id,
-                broadcast=broadcast,
+                {"camera": camera, "camera_revision": revision, "camera_aspect_scale": scale,
+                 "fit_axis_ranges": {axis: [float(pair[0]), float(pair[1])] for axis, pair in zip("xyz", ranges)}},
+                scene_id=scene_id, broadcast=False,
             )
+            publish_framed_camera(self, scene_id, broadcast=broadcast, ranges=ranges, command="fit")
             return self.get_camera(scene_id)
 
         if action in ("projection", "set_projection"):
@@ -971,6 +964,8 @@ class _CameraBackendMixin:
             "projection": normalized,
             "camera": fitted if replaced else camera,
         }
+        if state.get("camera_aspect_scale") not in (None, 1, 1.0):
+            payload["camera_aspect_scale"] = 1.0
         if replaced:
             payload["camera_revision"] = int(state.get("camera_revision", 0) or 0)
         self.patch_state(payload, scene_id=scene_id, broadcast=broadcast)

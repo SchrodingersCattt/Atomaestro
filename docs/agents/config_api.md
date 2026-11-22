@@ -54,7 +54,13 @@ curl -X PATCH http://localhost:50001/api/v2/config \
 Top-level sections:
 
 - `style`: default render style keys, mirroring
-  `mat_viewer.presets.DEFAULT_STYLE`.
+  `mat_viewer.presets.DEFAULT_STYLE`. Builtin cube defaults are
+  `isosurface_stride=2` and `isosurface_smooth=False`, the historical
+  marching-cubes mesh. `prepare_render` uses them. Pass stride 1 and
+  `isosurface_smooth=True` for the Taubin publication mesh.
+  `build_figure` isosurface traces ignore smoothing and stay raw
+  marching cubes. `style["material"]` remains `mesh` or `flat`; CPU
+  Blinn–Phong presets are `surface_material`, not this field.
 - `colors`: Atomaestro scene palette, radii, polyhedron auto-colours,
   and `selection_highlight`.
 - `cube`: cube/orbital panel palette and radii.
@@ -76,6 +82,14 @@ cutoff = 2.5
 Python callers may use tuple keys such as `{("Zn", "N"): 2.5}`. Explicit
 pair thresholds are scaled by the selected `bond_scale` and are forwarded to
 all canonical loaders, not only cube loading.
+
+`mat_viewer.config.vdw_radius(symbol)` reads MolCrysKit's van der Waals table
+for the `vdw` representation. Usual organic values in that table are Bondi
+radii. The compact display radii behind `ball` and `space_filling` stay in
+`colors.atom_radius` (`atom_radius(symbol)`). `mck_overrides.vdw_radius_overrides`
+is a bond-perception slot. It does not replace `vdw_radius()` and it does not
+implement `--style vdw`. A symbol the van der Waals table does not contain
+raises `ValueError`.
 
 `mat_viewer.config.element_color(symbol)` is the canonical semantic resolver.
 All renderers use its default `theme="canonical"` palette. The historical

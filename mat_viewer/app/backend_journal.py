@@ -131,8 +131,68 @@ class _JournalBackendMixin:
         current = self._copy_current(refs)
         return current[0] if current else None
 
-    def ensure_scene_figure(self, scene_id: Optional[str] = None) -> bool:
-        """Queue a complete frame for a scene missing from the journal."""
+    def reusable_scene_figure(self, scene_id: str) -> Optional[dict[str, Any]]:
+        """Return a journal figure whose body still matches this scene.
+
+        ``latest_figure_broadcast`` hides a figure once ``camera_revision``
+        moves, so that baked pose is never painted on its own. The body is
+        still the current geometry when the figure cache key matches: an
+        ordinary camera command does not change it, and flat ORTEP keeps the
+        camera inside the key. A scene resync can paint that body and then
+        the current camera envelope. A refit that changes the framed box
+        misses the key and is not reused.
+        """
+        target = str(scene_id)
+        with self._figure_broadcast_lock:
+            refs = [
+                payload
+                for payload in reversed(self._figure_broadcasts)
+                if isinstance(payload, dict)
+                and payload.get("type") == "figure"
+                and payload.get("figure")
+                and str(payload.get("scene_id") or "") == target
+            ]
+        if not refs:
+            return None
+        try:
+            current = self.get_state(target)
+        except Exception:
+            return None
+        if not isinstance(current, dict):
+            return None
+        for payload in (copy.deepcopy(item) for item in refs):
+            if self._figure_body_still_matches(payload, current):
+                return payload
+        return None
+
+    def _figure_body_still_matches(
+        self,
+        payload: dict[str, Any],
+        current: dict[str, Any],
+    ) -> bool:
+        state = payload.get("state")
+        if not isinstance(state, dict):
+            return False
+        try:
+            if "scene_generation" in state and int(state.get("scene_generation") or 0) != int(
+                current.get("scene_generation") or 0
+            ):
+                return False
+            if int(state.get("render_revision", -1)) != int(current.get("render_revision", -1)):
+                return False
+            return self._figure_state_cache_key(state) == self._figure_state_cache_key(current)
+        except Exception:
+            return False
+
+    def ensure_scene_figure(
+        self, scene_id: Optional[str] = None, *, force: bool = False
+    ) -> bool:
+        """Queue a complete frame for a scene missing from the journal.
+
+        ``force`` builds that frame even when the last confirmed edit was a
+        camera or overlay command. Those commands do not carry a figure, and
+        a tab return still needs the geometry.
+        """
         state = self.get_state(scene_id)
         if not isinstance(state, dict):
             return False
@@ -142,7 +202,7 @@ class _JournalBackendMixin:
         worker = getattr(self, "_render_worker", None)
         if worker is None:
             return False
-        return bool(worker.request_figure_build(state))
+        return bool(worker.request_figure_build(state, force=force))
 
     def ensure_active_scene_figure(self) -> bool:
         """Queue a figure when a subscriber arrives before any journal frame."""

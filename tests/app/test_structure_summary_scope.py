@@ -14,7 +14,7 @@ from mat_viewer.loader import build_bundle_scene, build_loaded_crystal
 from mat_viewer.scene.drawing_identity import drawing_identity, stamp_drawing_identity
 from mat_viewer.style.disorder import atom_is_disordered
 
-COD_CAFFEINE = Path(__file__).parents[1] / "fixtures" / "cod_4504310.cif"
+SCOPE_DISORDER = Path(__file__).parents[1] / "fixtures" / "synthetic_scope_disorder.cif"
 
 _ORDERED_PARTIAL_CIF = """data_ordered_partial
 _symmetry_space_group_name_H-M   'P 1'
@@ -429,11 +429,11 @@ def test_explicit_partial_occupancy_alternatives_stay_disordered(tmp_path: Path)
 
 
 @pytest.mark.filterwarnings("ignore:Structure contains disorder:UserWarning")
-def test_public_caffeine_scopes_keep_source_disorder_and_drop_visual_copies():
+def test_scope_views_keep_source_disorder_and_drop_visual_copies():
     bundle = build_loaded_crystal(
-        name="cod4504310",
-        cif_path=str(COD_CAFFEINE),
-        title="COD 4504310",
+        name="synthetic-scope-disorder",
+        cif_path=str(SCOPE_DISORDER),
+        title="Synthetic scope disorder",
     )
     summaries = {}
     counts = {}

@@ -131,12 +131,13 @@ reapplies `__mvLatestCamera` only when that snapshot is still the
 acknowledged pose. A drag does not write `__mvLatestCamera`, so the
 command from before the drag must not replace the orbit the book just
 painted. A command newer than the book still applies. The geometry
-frame's camera relayout is not a drag. Capture stores a camera
-relayout only for a live pointer, the one pointer-up commit, or a
-wheel whose eye is not the geometry frame or the server pose restore.
-A wheel that is already in progress does not adopt that programmatic
-eye. A later relayout on the same canvas keeps the orbit the server
-already accepted.
+frame's camera relayout is not a drag. Capture rejects that relayout,
+and a server pose restore, while they are in flight and when the
+relayout eye is the programmatic stamp. A wheel that is already in
+progress does not adopt that eye. A different camera relayout on the
+canvas is still stored, including an offscreen pose the server refits.
+A later relayout on the same canvas keeps the orbit the server
+already accepted when that relayout is the frame's own camera.
 
 For local baseline measurements, `window.__mv_view_diag` reports submissions,
 full frames, local patches, camera updates, and stale drops.

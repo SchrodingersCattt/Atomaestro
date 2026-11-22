@@ -88,17 +88,10 @@ def register_camera_clientside(app) -> None:
           if (!gestureId && lastGestureId && canvasId && lastGestureId !== canvasId && gestureKind !== "wheel") {
             return window.dash_clientside.no_update;
           }
-          // A geometry frame and a server pose restore both emit a camera
-          // relayout. The canvas id is not a gesture. Storing that relayout
-          // writes the frame's baked eye over the drag, which did not
-          // advance camera_revision. Only a live pointer, the one pointer-up
-          // commit, or a wheel owns this payload.
-          var endedAt = Number(window.__mvGestureEndedAt || 0);
-          var liveGesture = gestureKind === "wheel" || (!!gestureId && !endedAt);
-          var commitWindow = !!gestureId && gestureKind !== "wheel" && !!endedAt &&
-            (Date.now() - endedAt) < 450 && !window.__mvCaptureCommitSeen;
-          if (!liveGesture && !commitWindow) return window.dash_clientside.no_update;
-          if (commitWindow) window.__mvCaptureCommitSeen = true;
+          // A geometry frame and a server pose restore are rejected above by
+          // the programmatic depth and the stamped eye. A later camera
+          // relayout on this canvas is still a pose: an offscreen drag has
+          // to reach the server so the refit can bring the structure back.
           var sceneId = (gestureKind === "wheel" && canvasId) ? canvasId : (gestureId || canvasId);
           if (!sceneId) return window.dash_clientside.no_update;
           return {

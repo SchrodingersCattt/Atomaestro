@@ -27,7 +27,7 @@ const window = {
   dash_clientside: {no_update: 'NO'},
   __mvGestureSceneId: 'ionic',
   __mvGestureKind: 'pointer',
-  __mvGestureEndedAt: Date.now() - 1000,
+  __mvGestureEndedAt: Date.now(),
   __mvGestureSceneGeneration: 5,
   __mvGestureCameraRevision: 1,
   __mvCaptureCommitSeen: true,
@@ -43,6 +43,7 @@ const offscreen = {'scene.camera': {eye: {x: 0, y: 0, z: 50}, center: {x: 20, y:
 const refit = capture(offscreen);
 assert.equal(refit.scene_id, 'ionic', 'an offscreen camera relayout was not stored for refit');
 assert.equal(refit.relayout['scene.camera'].eye.z, 50);
+assert.equal(window.__mvCaptureDiag.reason, 'pointer-follow-up');
 window.__mvGestureEndedAt = 0;
 window.__mvCaptureCommitSeen = false;
 const drag = capture(relayout);
@@ -54,7 +55,40 @@ const commit = capture(relayout);
 assert.equal(commit.scene_id, 'ionic', 'the pointer-up commit was dropped');
 window.__mvProgrammaticCameraStamp = {eye: {x: 1, y: 1, z: 1}};
 assert.equal(capture(relayout), 'NO', 'the frame eye was stored after the pointer-up commit');
+window.__mvCaptureCommitSeen = true;
 window.__mvProgrammaticCameraStamp = null;
+window.__mvGestureEndedAt = Date.now();
+const second = capture(offscreen);
+assert.equal(second.scene_id, 'ionic', 'a second pointer follow-up was dropped');
+assert.equal(window.__mvCaptureDiag.reason, 'pointer-follow-up');
+window.__mvGestureEndedAt = Date.now() - 1500;
+assert.equal(capture(offscreen), 'NO', 'a named gesture stored a pose after the follow-up window');
+assert.equal(window.__mvCaptureDiag.reason, 'follow-up-expired');
+window.__mvGestureEndedAt = Date.now();
+const projectionDuring = {'scene.camera.projection.type': 'orthographic'};
+assert.equal(capture(projectionDuring), 'NO', 'a projection relayout was stored during the pointer follow-up');
+assert.equal(window.__mvCaptureDiag.reason, 'projection-only');
+window.__mvGestureSceneId = '';
+window.__mvGestureKind = '';
+window.__mvLastGestureSceneId = '';
+window.__mvGestureEndedAt = 0;
+window.__mvProgrammaticCameraStamp = null;
+window.__mvProgrammaticCameraDepth = 0;
+window.__mvUnadoptedWheel = null;
+assert.equal(capture(offscreen), 'NO', 'a frame relayout with no gesture was stored');
+assert.equal(window.__mvCaptureDiag.reason, 'no-gesture');
+const projectionOnly = {'scene.camera.projection.type': 'orthographic'};
+assert.equal(capture(projectionOnly), 'NO', 'a projection relayout with no gesture was stored');
+assert.equal(window.__mvCaptureDiag.reason, 'projection-only');
+window.__mvGestureSceneId = 'ionic';
+window.__mvGestureKind = 'wheel';
+window.__mvLastGestureSceneId = 'ionic';
+document.querySelector = () => ({layout: {meta: {mattervis_render: {scene_id: 'water'}}}});
+assert.equal(capture(offscreen), 'NO', 'a wheel stored a pose onto another canvas');
+assert.equal(window.__mvCaptureDiag.reason, 'wheel-other-scene');
+assert.equal(capture(projectionOnly), 'NO', 'a wheel stored a projection relayout onto another canvas');
+document.querySelector = () => ({layout: {meta: {mattervis_render: {scene_id: 'ionic'}}}});
+window.__mvGestureSceneId = 'ionic';
 window.__mvGestureKind = 'wheel';
 window.__mvGestureEndedAt = 0;
 window.__mvGestureSceneId = 'ionic';
@@ -77,3 +111,13 @@ assert.equal(stored.relayout['scene.camera.eye'].x, 0.4);
         check=False,
     )
     assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_pointercancel_releases_the_named_gesture():
+    source = Path(__file__).resolve().parents[2] / "frontend" / "assets" / "mattervis.js"
+    text = source.read_text(encoding="utf-8")
+    marker = 'addEventListener("pointercancel", function() {\n    window.__mvGestureEndedAt = Date.now();'
+    start = text.index(marker)
+    chunk = text[start:start + 700]
+    assert "releaseGestureScene" in chunk
+    assert "1000" in chunk

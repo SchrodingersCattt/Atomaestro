@@ -103,7 +103,14 @@ must not change scene B, and a stale revision must not replace a newer one.
   that has no session stamp. The restore after a complete frame follows
   the same book. `__mvLatestCamera` stays the last camera command, and
   a drag does not replace it. A programmatic camera relayout is not
-  stored while a wheel gesture is open. The orbit controller stores distance as a log
+  stored while a wheel gesture is open. A wheel stores a pose only when
+  its gesture names the mounted scene. A relayout with no pointer or
+  wheel gesture is not stored, and a projection-only relayout is not a
+  pose. A pointer follow-up is stored only while it still names that
+  scene and is inside the 1000ms release after pointerup or
+  pointercancel. Pointer cancel schedules that same release. The
+  follow-up accepts more than one pose, so the offscreen camera is not
+  dropped after the pointer-up sample. The orbit controller stores distance as a log
   radius and rebuilds `camera.eye` on the next matrix recalc, so the
   acknowledged pose is written with `lookAt` and recalculated after the
   relayout. A wheel zoom does the same after its eye relayout, on the

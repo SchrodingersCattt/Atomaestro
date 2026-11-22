@@ -226,7 +226,7 @@ assert.equal(result.camera_revision,2,'wheel stamped the stale canvas camera rev
 
 
 def test_camera_capture_wheel_fence_does_not_survive_scene_switch() -> None:
-    """A wheel stamp from A must not reject a later camera command on B."""
+    """A wheel stamp from A does not store a pose after the canvas is B."""
     node = shutil.which("node")
     if node is None:
         pytest.skip("Node.js is needed to execute the frontend regression")
@@ -263,7 +263,8 @@ emit('wheel',{{target:{{closest:()=>graph}}}});
 gd.layout=layout('b');
 const capture=vm.runInNewContext('('+callbackSource+')',sandbox);
 const result=capture({{'scene.camera':{{eye:{{x:99}}}}}});
-assert.equal(result.scene_id,'b','wheel fence from A survived the B scene switch');
+assert.equal(result,sandbox.window.dash_clientside.no_update,'a wheel from A stored a pose after the canvas moved to B');
+assert.equal(sandbox.window.__mvCaptureDiag.reason,'wheel-other-scene');
 """
     result = subprocess.run([node, "-e", program, str(source)], capture_output=True,
                             text=True, timeout=15)

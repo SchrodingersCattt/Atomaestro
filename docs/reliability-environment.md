@@ -70,9 +70,9 @@ label and keep the per-tab close control in `scene-tab-close-row`.
 
 Every install job uses the git commit in `pyproject.toml`:
 
-`a54a922eb2d11dca3fafac2d63a19c603541ca4d`
+`2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6`
 
-That commit is the reviewed head of open MolCrysKit PR 234. It includes
+That commit is the authorized pin. It includes
 Mercury `read_mryx` `0702ed8d` and lightweight CIF / phone-site
 `a4080132`. It is not MolCrysKit main. Do not retarget the pin to a
 later branch tip. Installing it before it is on MolCrysKit main is a

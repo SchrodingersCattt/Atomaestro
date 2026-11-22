@@ -3,9 +3,10 @@
 Atomaestro imports `.mryx` using **MolCrysKit `read_mryx_atoms`**. The viewer has
 no Mercury XML parser, element-code table or chemistry decoder of its own. The
 required upstream revision is
-`a54a922eb2d11dca3fafac2d63a19c603541ca4d`, the reviewed head of open
-MolCrysKit PR 234. It includes Mercury `read_mryx` `0702ed8d` and the
-lightweight CIF reader `a4080132`. It is not MolCrysKit main. `pyproject.toml`
+`2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6`, the authorized pin. It
+includes Mercury `read_mryx` `0702ed8d`, the lightweight CIF reader
+`a4080132`, and the label bound that discards unselected structures. It
+is not MolCrysKit main and not tip `7b859dd`. `pyproject.toml`
 requests the `desktop` extra of that commit. Core MolCrysKit is NumPy,
 NetworkX, and Click. The desktop extra supplies ASE, pymatgen, SciPy, spglib,
 and defusedxml, and `read_mryx` imports defusedxml from that extra.

@@ -103,7 +103,9 @@ must not change scene B, and a stale revision must not replace a newer one.
   that has no session stamp. The restore after a complete frame follows
   the same book. `__mvLatestCamera` stays the last camera command, and
   a drag does not replace it. A programmatic camera relayout is not
-  stored while a wheel gesture is open. The orbit controller stores distance as a log
+  stored while a wheel gesture is open. A relayout with no pointer or
+  wheel gesture is not stored. A later relayout that still names the
+  pointer gesture is stored, so an offscreen pose can be refit. The orbit controller stores distance as a log
   radius and rebuilds `camera.eye` on the next matrix recalc, so the
   acknowledged pose is written with `lookAt` and recalculated after the
   relayout. A wheel zoom does the same after its eye relayout, on the

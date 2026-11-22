@@ -134,10 +134,12 @@ painted. A command newer than the book still applies. The geometry
 frame's camera relayout is not a drag. Capture rejects that relayout,
 and a server pose restore, while they are in flight and when the
 relayout eye is the programmatic stamp. A wheel that is already in
-progress does not adopt that eye. A different camera relayout on the
-canvas is still stored, including an offscreen pose the server refits.
-A later relayout on the same canvas keeps the orbit the server
-already accepted when that relayout is the frame's own camera.
+progress does not adopt that eye. The canvas id is not a gesture. A
+relayout with no live pointer and no wheel is not stored, so a late
+frame relayout cannot persist a pose and the poll cannot publish the
+previous unit-cell checklist over a click. A later relayout that still
+names the pointer gesture is stored, including an offscreen pose the
+server refits.
 
 For local baseline measurements, `window.__mv_view_diag` reports submissions,
 full frames, local patches, camera updates, and stale drops.

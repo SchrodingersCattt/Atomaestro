@@ -88,11 +88,19 @@ def register_camera_clientside(app) -> None:
           if (!gestureId && lastGestureId && canvasId && lastGestureId !== canvasId && gestureKind !== "wheel") {
             return window.dash_clientside.no_update;
           }
-          // A geometry frame and a server pose restore are rejected above by
-          // the programmatic depth and the stamped eye. A later camera
-          // relayout on this canvas is still a pose: an offscreen drag has
-          // to reach the server so the refit can bring the structure back.
-          var sceneId = (gestureKind === "wheel" && canvasId) ? canvasId : (gestureId || canvasId);
+          // A geometry frame emits its camera relayout after the depth
+          // counter has already dropped. The canvas id is not a gesture.
+          // Storing that relayout persists a pose nobody dragged, and the
+          // poll keeps publishing the previous unit-cell checklist over
+          // the click. A live pointer, a wheel, or a later relayout that
+          // still names the pointer gesture is a pose. The offscreen drag
+          // arrives after the pointer-up commit and still names that gesture.
+          var endedAt = Number(window.__mvGestureEndedAt || 0);
+          var ownsCanvas = !!gestureId && (!canvasId || gestureId === canvasId);
+          var liveGesture = gestureKind === "wheel" || (ownsCanvas && !endedAt);
+          var gestureFollowUp = ownsCanvas && gestureKind !== "wheel" && !!endedAt;
+          if (!liveGesture && !gestureFollowUp) return window.dash_clientside.no_update;
+          var sceneId = (gestureKind === "wheel" && canvasId) ? canvasId : gestureId;
           if (!sceneId) return window.dash_clientside.no_update;
           return {
             scene_id: sceneId,

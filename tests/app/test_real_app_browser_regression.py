@@ -192,6 +192,16 @@ def test_orthographic_unit_cell_drag_keeps_dap4_visible(mattervis_url):
 
 
 @pytest.mark.timeout(300)
+def test_manual_orthographic_pan_refits_a_blank_unit_cell(mattervis_url):
+    """Two real right-button pans that clear the canvas must refit.
+
+    No ``Plotly.relayout`` is injected. The 45 second wait is the same
+    bound as the injected offscreen camera, and Fit is not clicked.
+    """
+    _run(mattervis_url, "ortho-pan", structure="DAP-4", timeout=280)
+
+
+@pytest.mark.timeout(300)
 def test_projection_and_range_switch_keeps_the_model_visible(mattervis_url):
     """A scene change that also changes projection must not clip the meshes."""
     _run(mattervis_url, "projection-scale", timeout=280)

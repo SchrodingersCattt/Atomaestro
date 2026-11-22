@@ -125,7 +125,18 @@ must not change scene B, and a stale revision must not replace a newer one.
   projection, and a refit that advances the revision still win. A
   camera that leaves the scene, including a unit-cell box with a corner
   outside the frustum, is still replaced by `refit_scene_camera` before
-  that pose is what the store paints. Every writer of
+  that pose is what the store paints.   A pointer release that never
+  emits a camera relayout, such as a pan that ends outside the plot,
+  paints this accepted camera instead of leaving the WebGL eye where
+  the drag stopped. An inside-plot release emits Plotly's canvas
+  mouseup relayout before that paint, and the committed pan stays
+  with the server. The paint is dropped when a newer pointer gesture
+  has started or the mounted scene is no longer the one that was
+  released. It counts as a camera relayout after pointer-up even
+  while a frame react is still open, so that frame does not put the
+  sampled eye back over the accepted camera. A drag the revision
+  fence rejects is not stored, and the response still carries the
+  camera that won. Every writer of
   `camera-state-store` uses `allow_duplicate`.
 - One per-graph FIFO task owns a complete frame and the camera writes that
   belong to it. The projection follow-up, a fitted-range restore, and the

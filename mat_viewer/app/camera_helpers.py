@@ -40,6 +40,23 @@ def _camera_store_payload(
     return payload
 
 
+def _repaint_accepted_camera(state: dict[str, Any]) -> dict[str, Any]:
+    """Return the camera the server kept after a drag lost the revision race.
+
+    The persisted camera and its revision stay as they are. The store
+    payload is what the browser paints, because the WebGL eye can still
+    be the drag that was rejected.
+    """
+    return {
+        "scene_id": str(state.get("scene_id") or ""),
+        "camera_store": _camera_store_for_state(state),
+        "agent_state": None,
+        "refit": False,
+        "view_update": None,
+        "repaint": True,
+    }
+
+
 def _camera_store_for_state(
     state: Optional[dict[str, Any]],
     camera: Optional[dict[str, Any]] = None,
@@ -471,7 +488,10 @@ def _persist_relayout_camera(
     except (TypeError, ValueError):
         return None
     if captured_camera_revision != int(state_before.get("camera_revision", 0) or 0):
-        return None
+        # Reset or a refit already owns this scene. The drag is not stored.
+        # The canvas still has the drag's eye, so hand back the camera that
+        # won and let the client paint it.
+        return _repaint_accepted_camera(state_before)
     # The revision fence above names the live server camera. The Dash store
     # may still contain the camera from before a projection command; using
     # it as the base of a partial relayout silently restores that projection.
@@ -508,7 +528,7 @@ def _persist_relayout_camera(
         }
     )
     if committed.get("stale_camera"):
-        return None
+        return _repaint_accepted_camera(backend.get_state(scene_id))
     state = backend.get_state(scene_id)
     flat_ortep = state.get("material") == "flat" and state.get("style") == "ortep"
     view_update = None

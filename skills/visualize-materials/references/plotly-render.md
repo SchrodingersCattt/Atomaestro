@@ -28,7 +28,7 @@ mat-vis capabilities --require static-web-export --json
 ```
 
 Both aliases report
-`python -m pip install "matter-vis[plotly-export,web]"`. A failed Web export is
+`python -m pip install "atomaestro[plotly-export,web]"`. A failed Web export is
 reported as an error; it does not return a placeholder image.
 
 Do not install Chrome automatically and do not substitute CPU output after a

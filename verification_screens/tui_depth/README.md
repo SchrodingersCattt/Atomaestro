@@ -20,7 +20,14 @@ The CaF₂ fixture supplies one connected entity, which stays a silhouette at
 molecule level. Bonds follow the supplied IR; the renderer does not invent
 ionic bonds.
 
-To reproduce in either checkout (with `matter-vis[tui]` and optional `cairosvg`):
+These before/after frames are a historical capture from issue #211, made
+while the distribution name was still `matter-vis`. To reproduce those two
+checkouts, install that historical tree's Textual extra as `matter-vis[tui]`
+and optional `cairosvg`. A current checkout names the same extra
+`atomaestro[tui]`; that project is not on PyPI, and the published 0.0.6
+release is still `matter-vis[tui]`.
+
+Historical reproduction:
 
 ```sh
 PYTHONPATH=/path/to/checkout python /path/to/this/scripts/11_tui_depth_visuals.py \

@@ -139,7 +139,7 @@ a bond as `position[left]` to `position[left] + vector_A`. Connecting the
 two displayed endpoints is wrong for periodic-image bonds, where
 `position[right] - position[left]` differs from `vector_A`. Self-image bonds
 (`left == right`, non-zero shift) are valid. Draw sticks for `covalent`;
-`coordination` bonds are kept for topology and are not sticks. MatterVis
+`coordination` bonds are kept for topology and are not sticks. Atomaestro
 copies these fields and derives no chemistry.
 
 Each entry of `sites` also passes through two MolCrysKit `SiteRecord` fields:
@@ -157,7 +157,7 @@ that offers a unit-cell view may wrap a site with
 `image_shift` is per-site provenance only; it is not a generally valid
 whole-molecule or home-cell wrapping shortcut, so do not wrap by subtracting
 it; a periodic bond is drawn from the wrapped `left` using
-`vector_A`. Wrapping is a display choice; MatterVis derives no chemistry and
+`vector_A`. Wrapping is a display choice; Atomaestro derives no chemistry and
 the snapshot keeps the contiguous view by default.
 
 `operate_commit_major` and `operate_commit_major_with_cif` share one

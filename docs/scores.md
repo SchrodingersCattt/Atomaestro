@@ -225,7 +225,7 @@ The renderer draws `hull.simplices` as a translucent mesh and `hull.edges` as
 a thick line trace to produce the purple polyhedra in the README screenshots.
 If `scipy.spatial.ConvexHull` is unavailable the hull gracefully falls back
 to `{vertices: [...], simplices: [], edges: []}` and only the vertices are
-shown. Coplanar or collinear ligands make Qhull raise `QhullError`. MatterVis
+shown. Coplanar or collinear ligands make Qhull raise `QhullError`. Atomaestro
 calls that flat only when the centered coordinates have affine rank below 3
 (`AFFINE_RANK_RELATIVE_TOLERANCE` 1e-8 of the largest singular value, and at
 least 1e-8 absolute). The empty face list then has `degenerate: true` and

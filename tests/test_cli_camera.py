@@ -362,7 +362,7 @@ def test_plotly_static_preflight_uses_capability_registry() -> None:
 
     assert resolution.extras == ("plotly-export",)
     assert resolution.install_command == (
-        'python -m pip install "matter-vis[plotly-export]"'
+        'python -m pip install "atomaestro[plotly-export]"'
     )
 
 

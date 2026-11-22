@@ -280,7 +280,7 @@ def test_batch_renderer_does_not_silently_drop_a_specular_preset() -> None:
         surface_material="hard_plastic",
     )
     with pytest.raises(ValueError, match="surface-material"):
-        render_batch_if_selected(args, install_command="python -m pip install matter-vis")
+        render_batch_if_selected(args, install_command="python -m pip install atomaestro")
 
 
 def test_white_and_tinted_highlights_follow_the_base_color() -> None:

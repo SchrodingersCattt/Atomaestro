@@ -1,13 +1,25 @@
 # Install Atomaestro
 
-Use the published PyPI package by default:
+The command is `mat-vis`. Python imports stay `mat_viewer`.
+
+Install the release that is on PyPI today:
 
 ```bash
-python -m pip install matter-vis
+python -m pip install "matter-vis==0.0.6"
 ```
 
-This installs core dependencies, including MolCrysKit. Add optional extras only
-when required; see [capabilities and installation](./capabilities-and-install.md).
+`atomaestro` is the distribution name in this repository. It is not on PyPI.
+After a confirmed release is actually published, and not before, the command
+becomes:
+
+```bash
+python -m pip install atomaestro
+```
+
+Do not install `matter-vis` and `atomaestro` into the same environment. Both
+full distributions own `mat_viewer` and the `mat-vis` script. The migration
+notes are in the repository file `docs/rebranding.md`. Add optional extras
+only when required; see [capabilities and installation](./capabilities-and-install.md).
 
 For requested Atomaestro source changes, install a checkout instead:
 

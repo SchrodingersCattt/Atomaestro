@@ -116,12 +116,20 @@ jobs:
           import importlib.metadata
           import os
 
-          actual = importlib.metadata.version("matter-vis")
+          actual = importlib.metadata.version("atomaestro")
           expected = os.environ["EXPECTED_VERSION"]
           if actual != expected:
               raise SystemExit(f"Built version {actual!r} does not match tag version {expected!r}")
-          print(f"matter-vis {actual}")
+          print(f"atomaestro {actual}")
           PY
+
+      - name: Reject direct-reference requirements
+        env:
+          RELEASE_TAG: ${{ needs.release-checks.outputs.tag }}
+        run: |
+          python .github/scripts/reject_direct_dependencies.py \
+            --tag "${RELEASE_TAG}" \
+            dist/*
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4
@@ -134,31 +142,78 @@ jobs:
     name: Publish to PyPI
     runs-on: ubuntu-24.04
     needs: [release-checks, build-package]
+    # Configured pending publisher on the PyPI account, not on matter-vis.
+    # Exact form values: project atomaestro, owner SchrodingersCattt,
+    # repository Atomaestro, workflow filename release.yml, environment pypi.
+    # The tag must be the vX.Y.Z value release-checks already accepted.
+    if: github.repository == 'SchrodingersCattt/Atomaestro' && needs.release-checks.outputs.tag == github.ref_name
     environment:
       name: pypi
-      url: https://pypi.org/project/matter-vis/
+      url: https://pypi.org/project/atomaestro/
     permissions:
       contents: read
       id-token: write
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install the upload-guard dependency
+        env:
+          PIP_CONSTRAINT: requirements/ci-constraints.txt
+        run: |
+          python -m pip install "pip==${CI_PIP_VERSION}"
+          python -m pip install -c requirements/ci-constraints.txt packaging
+
       - name: Download distributions
         uses: actions/download-artifact@v4
         with:
           name: python-package-distributions
           path: dist/
 
+      - name: Reject a non-release tag or direct-reference requirements
+        run: |
+          python .github/scripts/reject_direct_dependencies.py \
+            --tag "${GITHUB_REF_NAME}" \
+            dist/*
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+          attestations: true
 
   create-github-release:
     name: Create GitHub Release
     runs-on: ubuntu-24.04
     needs: [release-checks, publish-pypi]
+    if: github.repository == 'SchrodingersCattt/Atomaestro' && needs.release-checks.outputs.tag == github.ref_name
     permissions:
       contents: write
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install the upload-guard dependency
+        env:
+          PIP_CONSTRAINT: requirements/ci-constraints.txt
+        run: |
+          python -m pip install "pip==${CI_PIP_VERSION}"
+          python -m pip install -c requirements/ci-constraints.txt packaging
+
       - name: Download distributions
         uses: actions/download-artifact@v4
         with:
@@ -168,7 +223,20 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VALIDATED_TAG: ${{ needs.release-checks.outputs.tag }}
         run: |
+          set -euo pipefail
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "GitHub Release requires a vX.Y.Z tag: ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+          if [[ "${GITHUB_REF_NAME}" != "${VALIDATED_TAG}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match validated tag ${VALIDATED_TAG}" >&2
+            exit 1
+          fi
+          python .github/scripts/reject_direct_dependencies.py \
+            --tag "${GITHUB_REF_NAME}" \
+            dist/*
           gh release create "${GITHUB_REF_NAME}" dist/* \
             --repo "${GITHUB_REPOSITORY}" \
             --generate-notes \

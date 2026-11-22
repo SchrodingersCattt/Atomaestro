@@ -94,7 +94,7 @@ def _package_version() -> str:
     try:
         from importlib.metadata import version
 
-        return version("matter-vis")
+        return version("atomaestro")
     except PackageNotFoundError:
         return "unknown"
 

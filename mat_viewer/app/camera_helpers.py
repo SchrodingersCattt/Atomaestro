@@ -19,6 +19,7 @@ def _camera_store_payload(
     *,
     camera_revision: Any = None,
     scene_generation: Any = None,
+    server_started_at: Any = None,
 ) -> dict[str, Any]:
     """Camera the browser may paint, with the clocks that accepted it.
 
@@ -34,6 +35,8 @@ def _camera_store_payload(
             pass
     if scene_generation is not None and scene_generation != "":
         payload["scene_generation"] = scene_generation
+    if server_started_at is not None and server_started_at != "":
+        payload["server_started_at"] = server_started_at
     return payload
 
 
@@ -49,6 +52,7 @@ def _camera_store_for_state(
         chosen,
         camera_revision=state.get("camera_revision"),
         scene_generation=state.get("scene_generation"),
+        server_started_at=state.get("server_started_at"),
     )
 
 

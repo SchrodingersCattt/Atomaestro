@@ -49,15 +49,19 @@ commands are in
 |---|---|---|
 | MolCrysKit | symmetry-expanded sites, molecule and ASU identity, PBC bonds, ADPs, rings, formula-unit selection | cameras, colors, output formats |
 | Atomaestro selection | which public records and periodic images are displayed | re-perceived bonds or private MolCrysKit `.info` fields |
-| representation | ball-and-stick, space filling, wireframe, ORTEP, aromatic circle/disk | renderer selection |
+| representation | ball-and-stick, ball, space filling, wireframe, ORTEP, vdw, flat illustration, aromatic circle/disk | renderer selection |
 | shading | smooth, flat, ORTEP axes/hatch | chemical topology or output format |
 | camera | one homogeneous orthographic/perspective transform and clipping contract | chemistry or backend fallback |
 | backend | CPU, Plotly, or optional GPU conversion of an existing `RenderPlan` | changing representation or chemistry |
 | encoder/frontend | HTML, Web service, TUI, GIF/MP4, Cube mesh extraction | implicit installation or backend switching |
 
-ORTEP is a representation, `flat` is shading, and `cpu`/`plotly`/`gpu` are
-backends. Those choices remain independent in both the Python contracts and
-the CLI.
+ORTEP, `vdw`, and `flat_illustration` are representations. `shading="flat"`
+is per-face triangle shading. `material="flat"` is the billboard technique
+(and, with ORTEP, the 2D publication path). Neither flag is
+`flat_illustration`. `cpu`/`plotly`/`gpu` are backends. Those choices remain
+independent in both the Python contracts and the CLI. `vdw` radii come from
+MolCrysKit's van der Waals table (Bondi for the usual organic elements).
+`ball` and `space_filling` keep the compact display-radius table.
 
 ## Static rendering
 
@@ -103,6 +107,23 @@ are rejected. It never substitutes the CPU renderer when the optional
 dependency, the device, or a primitive is unavailable. CPU PNG and
 true-vector PDF/SVG remain the reference paths.
 
+Cube isosurface meshes carry one shading record copied from the
+surface-material library: ambient, diffuse, specular, shininess, specular
+tint, and Fresnel when it is not neutral. Opacity is the object alpha and
+is not part of that record. Light strength stays on the lighting rig; a
+light scale on this record is rejected and is not folded into the
+coefficients. This adapter does not keep a private preset table. The CPU
+surface shader evaluates the copied record, including Fresnel and a base
+specular tint. `shade_albedo`, Matplotlib, and Plotly reject a non-neutral
+Fresnel record or a non-white specular tint instead of rewriting it.
+Plotly mesh and volume traces receive in-range coefficients unchanged.
+Plotly's shader clamps the Lambert sum and uses Cook-Torrance highlights,
+so those pixels are not identical to the CPU where the sum exceeds 1. A
+coefficient outside the interval Plotly can store is rejected rather than
+clamped. The GPU backend rejects the mesh instead of drawing a flat color.
+The material does not add a scalar field or a colormap; a second color cube
+remains the albedo.
+
 `mat-vis capabilities` and `mat-vis render --check` are the authoritative
 dependency resolver. No skill or installer maintains a second dependency
 table.
@@ -136,6 +157,29 @@ newer complete-frame identity is requeued, and an older one is dropped.
 figure: a process-wide camera or display classification does not skip the
 frame when the mounted figure still belongs to another scene. The delivery
 contract is `docs/reliability-scene-delivery.md`.
+
+## CIF upload and native extension files
+
+Uploaded CIFs are named from a content hash plus the sanitized filename.
+Each request writes a private temporary file. The backend lock covers
+concurrent requests in one process and publishes that file only when the
+destination is absent. A later retry does not replace the published path.
+It checks the full digest when the file can be read, and that read does
+not hold the backend lock. A Windows sharing violation retries that digest
+read a few times. If the bytes still cannot be read, the retry fails and
+leaves the published file in place. Equal size is not treated as a
+verified digest. A readable file whose digest differs is left unchanged
+and the retry fails.
+
+Native structure writes mark candidate CIFs read-only until host shutdown.
+Failed and cancelled candidates, and retained files at shutdown, are made
+owner-writable before deletion. A deletion error does not replace the
+original write failure. Windows can then remove the same files POSIX would
+remove.
+
+The read-only deletion case and the Win32 `CreateFileW` share-mode cases
+run in CI on `windows-latest`. A result that skips those cases does not
+meet this contract.
 
 ## Documentation of the render interface
 

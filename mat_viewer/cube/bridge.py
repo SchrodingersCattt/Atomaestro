@@ -91,10 +91,10 @@ def build_cube_figure(
 ):
     """Render a cube file through the unified crystal pipeline with isosurface overlay.
 
-    This is the canonical Plotly cube entry point. The structure (atoms, bonds)
-    goes through the full rendering pipeline
-    (MCK bonds, correct colors/materials, display modes) and the volumetric data
-    is rendered as an isosurface overlay on top.
+    Plotly figure helper, not the journal export. The structure (atoms, bonds)
+    goes through the scene pipeline. The isosurface is
+    `isosurface_overlay_traces`: a fresh marching-cubes mesh with no Taubin
+    smoothing. `mat-vis render --backend cpu` is the smoothed publication path.
 
     Parameters
     ----------
@@ -118,6 +118,10 @@ def build_cube_figure(
         static figures when the figure is built.
     style : dict, optional
         Style overrides (isosurface_*, atom_scale, bond_radius, etc.).
+        ``isosurface_material``, ``isosurface_specular``, and
+        ``isosurface_shininess`` select the
+        shared isosurface material. Plotly receives those weights unchanged.
+        A coefficient it cannot store raises instead of being clamped.
     display_mode : str
         Display mode for the structure ("formula_unit", "unit_cell", etc.).
     show_hydrogen : bool

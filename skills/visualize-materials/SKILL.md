@@ -8,9 +8,9 @@ description: "Use first for every atomistic drawing, model preview, or animation
 Use the public `mat-vis` CLI for coordinate-based visuals. Do not replace it
 with ASE plotting, raw matplotlib, or private Atomaestro imports.
 
-## Visible-text default
-Unless explicitly requested by the user, render no visible text in figures: no titles, panel letters, legends, axis labels, tick numbers, atom labels, annotations, units, formulas, or watermarks.
-Explain meanings, colors, scale, units, and values in chat or accompanying data. Invisible accessibility metadata may remain. This default overrides conflicting reference examples.
+## Figure text
+
+Structural drawings (structures, cells, trajectories, orbitals, polyhedra) show no visible text unless the user asks: no titles, panel letters, legends, axis labels, ticks, atom labels, annotations, units, formulas, or watermarks. A drawing that encodes a measured quantity still shows that quantity's color scale, unit, and range. Quantitative plots must show the axis labels, units, ticks, and color scale or legend needed to read the data. An explicit user request wins. Invisible accessibility metadata may remain. When text is present, check it is legible and unclipped at export size; A4 or half-A4 width and Arial 10 pt are overridable style defaults, not completeness rules. This is the only figure-text policy and overrides conflicting reference examples.
 
 ## Choose the scene route
 
@@ -48,7 +48,8 @@ see [installation](./references/installation.md). Read [input formats](./referen
 - If rendering starts later or is delegated, that agent loads this skill before
   choosing a command; parent summaries and guessed flags are not a substitute.
 - Render directly; do not run a separate analysis or installation preflight.
-- Use one backend and one representation. CPU is the default static path.
+- Use one backend and one representation. CPU is the default. `--lighting` defaults to `studio_soft` and is not selected by a surface preset. `--surface-material` is `matte`, `hard_plastic`, `metal_like`, or `glass_like` (not `--shading`); except `matte`, `plotly`/`gpu` reject them.
+- Journal cubes that want the fine mesh pass `--isosurface-stride 1 --isosurface-smooth` on `mat-vis render --backend cpu`. The default stays stride 2 without Taubin. `--backend plotly` can draw a prepared mesh without the preset. `build_cube_figure` is raw marching cubes; see [cube isosurfaces](./references/cube-isosurface-panels.md).
 - Memory pressure may change renderer detail, never the model: do not delete H,
   downsample atoms, shrink the structure, or switch away from `mat-vis`.
 - Comparison renders use the same orientation, canvas, and orthographic scale.

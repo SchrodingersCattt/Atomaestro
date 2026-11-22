@@ -33,6 +33,23 @@ mat-vis render INPUT.cif -o OUTPUT.svg --backend cpu --json \
   an SVG containing a full-canvas `<image>` raster substitute.
 - `ortep` is a representation; `flat` is shading; `cpu` is the backend. Do not
   treat those as interchangeable selector names.
+- `--lighting studio_soft` is the default camera-space light and matches
+  omitting the flag. `--lighting unlit` disables CPU shading. Do not pass
+  `studio_three_point` on this path; the CPU renderer rejects it instead of
+  drawing a fake three-light figure. A surface preset such as `hard_plastic`
+  or `metal_like` does not change the rig. `--publication-style` is rejected
+  and is not a lighting alias.
+- `--surface-material matte|hard_plastic|metal_like|glass_like` is a CPU
+  Blinn–Phong preset for atoms, bonds, and CPU isosurfaces. `matte` keeps
+  the current look. `metal` and `glass` are rejected. It does not change
+  `--shading smooth|flat`. Plotly and GPU reject every preset except `matte`.
+  `--renderer batch` rejects the non-matte presets; `--renderer auto` uses
+  the general renderer for them. `glass_like` is a Fresnel rim on CPU PNG.
+- Cube isosurfaces on this backend are Taubin-smoothed (λ = 0.5, μ = −0.53,
+  15 iterations) when `--isosurface-smooth` is set. The default is the
+  raw marching-cubes mesh at `--isosurface-stride 2`. Combine
+  `--isosurface-stride 1 --isosurface-smooth` for the fine publication mesh.
+  `build_cube_figure` is not this smoothed export.
 - Missing ADPs default to an error. `sphere` is an explicit visual placeholder,
   not a fabricated displacement measurement; record its use.
 - Aromatic rings default to ordinary bonds. Select circle/disk only when the

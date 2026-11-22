@@ -141,6 +141,12 @@ Notes for callers:
   figure still belongs to another scene receives the selected scene's
   complete frame instead. Flat ORTEP still rebuilds its image when the
   camera changes, because the camera basis is rasterized into that image.
+  That figure's Plotly scene camera is `eye` / `center` / `up`. A stored
+  `position` / `focal_point` camera is converted before the layout is
+  built; the stored mapping itself is left unchanged. A zero-length look
+  vector uses the existing finite eye fallback. The orbit scene background
+  is transparent so its paper image stays visible; an opaque background
+  covers the raster and leaves the caption.
 - `pending_state` is armed for a broadcast write to the active scene
   (REST `POST /state`, WebSocket `set_state`, and external `/intent`
   calls). The existing agent-state poll writes the matching page's
@@ -151,7 +157,8 @@ Notes for callers:
 - Scene create, rename, delete, reorder, duplicate, and undo append a
   `scene_catalog` envelope to the same journal and include
   `scene_catalog` on the WebSocket snapshot and on `GET /view-updates`.
-  The page rebuilds its existing tab strip from that message. The
+  The page rebuilds its existing tab strip from that message. The scene
+  display name comes from this catalog event; tab text is a projection. The
   selected tab stays put, except on the page that clicked Duplicate:
   that page selects the catalog `active_id` locally. `focus` stays
   false for create, rename, delete, reorder, duplicate, and undo, so
@@ -180,15 +187,27 @@ Notes for callers:
   style owner. `uirevision` includes the scene id, structure name, camera
   revision, and viewport signature, so two scenes that share a structure and
   camera do not keep one WebGL camera. Clients preserve the live camera only
-  for the same scene, scene generation, server epoch, and `uirevision`. A
-  transient camera revision is read back only for that same generation and
+  for the same scene, scene generation, server epoch, and `uirevision`
+  while a gesture on that scene is still in progress. A settled drag,
+  pan, or zoom leaves `camera_revision` unchanged. The published figure
+  snapshot is not rewritten from that later camera.
+  `camera-state-store` carries the accepted pose, `camera_revision`, and
+  `scene_generation`. Every writer of that store uses `allow_duplicate`.
+  Returning to the scene paints the store camera for that same revision
+  and generation, not the pose baked into the last complete frame. A
+  store older than the mounted revision is ignored. A clipped or
+  off-screen camera is still replaced by the scene refit before the
+  store is what the canvas paints. A transient camera revision is read back only for that same generation and
   epoch. A width/height replot during an in-progress drag restores the live
   drag camera only when that drag's scene generation and, when both sides
   have one, server session still match the mounted figure. A frame or
   replot that finishes during that drag puts that gesture's sampled eye
-  back under the same rule. The sample is cleared when the gesture is
-  stamped or released. A newer camera revision wins over both the sample
-  and a pose captured before the replot. Explicit camera revisions use
+  back under the same rule.   A figure react that started before pointer-up
+  still puts that sampled eye back if it finishes after the button is up,
+  unless a camera relayout has already landed after pointer-up.
+  A react that starts after pointer-up does not. The sample is cleared
+  when the next gesture is stamped. A newer camera revision wins over both
+  the sample and a pose captured before the replot. Explicit camera revisions use
   the supplied camera and still win over that drag. A duplicate scene schedules its own complete frame.
   An in-flight build publishes only for its current scene identity; a newer
   complete-frame identity is requeued and an older one cannot roll that scene
@@ -275,8 +294,11 @@ Notes for callers:
   `atom_property_color` (nullable public property-color spec; see
   `atom_property_coloring.md`), `fast_rendering`, `camera`, `cutoff`.
   `material` is `mesh` or
-  `flat`; `style` is `ball`, `ball_stick`, `stick`, `ortep`, or
-  `wireframe`; `disorder` is `opacity`, `dashed_bonds`,
+  `flat` (billboard technique, not `flat_illustration`); `style` is `ball`,
+  `ball_stick`, `space_filling`, `stick`, `ortep`, `wireframe`, `vdw`, or
+  `flat_illustration`. The Dash `#style-selector` and `#material-selector`
+  dropdowns still list the original mesh/billboard choice and the original
+  `ball`, `ball_stick`, `stick`, `ortep`, and `wireframe` styles. `disorder` is `opacity`, `dashed_bonds`,
   `outline_rings`, `color_shift`, or `none`. Fresh scenes default to
   occupancy-based disorder opacity (`disorder="opacity"`, `minor_opacity=0.35`),
   hydrogens + unit-cell box visible, labels hidden, and
@@ -324,7 +346,80 @@ Notes for callers:
   `{"action": "orbit", "yaw_deg": 12, "pitch_deg": -6}`,
   `{"action": "pan", "dx": 0.05, "dy": -0.03, "dz": 0.0}`,
   `{"action": "reset"}`,
-  `{"action": "fit"}`,
+  `{"action": "fit", "width": 939, "height": 750, "visible_height": 682}`,
+  Fit frames the displayed target inside an 8% margin of the shorter
+  side of the clear WebGL viewport. `width` and `height` are the
+  canvas CSS box in pixels. `visible_height` is that box cut off where
+  the status bar or the Fit button covers it. Omitted sizes use
+  939×800. The same update replaces the axis ranges with the data box
+  that was framed. Plotly normalizes that range onto the aspect box,
+  and the default perspective view widens it so a diagonal camera does
+  not clip a corner; leaving that wider range in place makes the cell
+  a small fraction of the box. Perspective moves the eye along its
+  current direction. Orthographic pixel size does not follow eye
+  length, so Fit scales the manual scene aspect ratio and leaves the
+  eye distance unchanged. Perspective uses that same aspect scale only
+  when eye distance alone leaves the target smaller than the margin.
+  The cell boundary selects unit-cell corners as the target, expanded by
+  the cell-edge tube radius so the stroke is inside the margin. With the
+  boundary off, the target is the drawn atom extent. Stick, wireframe,
+  and flat-illustration drawings also include each visible bond, expanded
+  by the radius that trace uses. A bond that crosses the axis box is
+  clipped to that box first, because the mesh stops there and a replica
+  past the box is not painted. Orthographic extent
+  is the sphere's silhouette in the camera plane. Perspective extent is
+  the tangent cone of that sphere, recomputed at the solved eye, so a
+  close sphere is not clipped past its equator. The stored camera is
+  that eye, center, and up. A position/focal pair
+  is not kept beside it, and an eye present on the same dict does not
+  widen the axis range. Fit pans the eye and the center together so the
+  target box is centered in the clear viewport, which is shorter than
+  the canvas where the status bar covers it. The uniform aspect search
+  runs up to 48 so a molecule that occupies a small part of its cell
+  can still reach the margin.   A Fit or Reset that sends an aspect is
+  checked against that aspect, within 1% on each component, rather than
+  against the canonical viewport. The canonical viewport still uses its
+  8% check when the command did not send an aspect. A failed check records the live eye,
+  center, ranges, and aspect before the restore status is shown.
+  The first figure's camera revision is 0. A later figure whose camera
+  revision is older than the Fit that is already on the canvas is not
+  applied, so that first cell box cannot replace the fitted ranges.
+  A later figure delivery rewrites the axis
+  ranges from that same data box, including a cache hit, a display-option
+  rebuild, and a return to the scene.   The same delivery keeps the fitted
+  aspect on the layout and on the gl scene: a scene plot after the camera
+  move writes that ratio, and the next figure for the scene is delivered
+  with it.   A later camera delivery while that fit is active carries the
+  same ratio and data box, including a relayout echo that would otherwise
+  leave the previous ratio on the layout.   A scene plot that finishes
+  after that delivery, including a second Fit whose data box did not
+  change, still leaves this ratio on the layout.   A projection change
+  disposes the gl scene and assigns a new one before that plot's last
+  aspect write; the fitted ratio is applied on the replacement, so the
+  previous ratio is not the value that remains.   A figure whose camera
+  revision is newer than the stored fit keeps that figure's ratio
+  instead of having the previous ratio stamped over it. A Fit or other
+  camera command for the selected scene waits until a figure for that
+  scene and generation has replaced the traces. A react that resolves
+  without installing those traces does not apply the command and does
+  not rewrite the canvas identity. A new generation keeps its own
+  command, including camera version 0; a higher version from an older
+  generation does not replace it. A later committed figure with a
+  higher camera revision drops the held command. A rejected react
+  leaves the command held.   A new server epoch clears it. Leaving the
+  scene does not apply it; returning, once that geometry is current,
+  does. A painted sample may keep the same eye, center, aspect, and
+  data box while `render_revision` advances. That sample also carries
+  the scene generation, the geometry version, and a digest of the
+  finite coordinates on the visible traces. Those three have to match
+  on both sides of the screenshot. The same camera and data box with a
+  different digest is not the same geometry.   An older camera
+  revision for the same scene generation and server epoch does not
+  replace it. A new scene, scene generation, or server epoch starts
+  its own camera clock. A state patch with a
+  non-finite or non-positive aspect scale, or a fitted range that is not
+  three finite non-empty intervals, does not change the stored Fit.
+  Reset restores aspect scale 1 and drops that fitted box.
   `{"action": "align", "axis": "c"}`  (VESTA-style "look down lattice
   axis ``c``"; valid axes are `a`, `b`, `c`, `a*`, `b*`, `c*`),
   `{"action": "projection", "type": "orthographic"}`  (toggle the
@@ -524,6 +619,35 @@ configure Python `requests` with `session.trust_env = False` (or
 `proxies={"http": None, "https": None}`) when calling
 `http://127.0.0.1:<port>/api/v2`.
 
+## Dash version
+
+The web extra requires Dash 2.18.2 or newer. Scene selection is always
+`scene-tabs`. Dash 4.0.0 is the first stable release that accepts a
+component as `dcc.Tab.label`. On that release and later, the per-tab
+close control is inside that label (`scene-tab-label-{id}` and
+`scene-tab-close-{id}`). On Dash 2.18.2 through 3.x the label is the
+scene name string, and the same close control is a child of
+`scene-tab-close-row`. The scene catalog message is the only label
+source (`MatterVisSceneLabels`). HTML projections carry
+`data-scene-id` and `data-display-name` on the component label or the
+close-row span. `dcc.Tab` is not given those attributes, and the
+adapter does not extend its private wildcard list. Tab text is not
+read back as the scene name. Passing a component label to Dash 2.18.2
+through 3.x raises `TypeError` while the layout is built and the page
+falls back to the error screen.
+
+A sidebar edit that arrives after `scene-tabs` has selected another scene,
+but before that scene's controls are recorded as filled, is not stored.
+The tab callback records the filled scene before it refits the camera, so a
+click after that record is an ordinary capture. A scene-tab control sync
+that lands after a later edit is dropped; the tab's own sync still applies
+while its epoch is current. A complete frame for the newly selected scene
+stays parked until that control stamp names the scene, so the canvas the
+page treats as current already has that scene's sidebar. The selection dock reserves its gutter and finishes the canvas refit
+before a pick becomes the observable selection. Escape clears the outline
+immediately, and the server clear is written only after that same relayout
+has settled, so the next pick uses the settled viewport.
+
 ## Stable UI element IDs
 
 Use these when scripting through Selenium / Playwright / Dash testing
@@ -566,7 +690,7 @@ The full list (authoritative; the diagram only groups them):
 
 - `scene-tabs`: scene tab row
 - `scene-tab-{id}`: individual scene tab
-- `scene-tab-close-{id}`: per-tab close button when rendered
+- `scene-tab-close-{id}`: per-tab close button. Inside the tab label when Dash accepts a component label; otherwise in `scene-tab-close-row`
 - `scene-new-tab-btn`: duplicate/new scene button
 - `scene-tab-rename-input`: active scene rename input
 - `scene-cif-upload`: upload zone
@@ -608,7 +732,8 @@ The full list (authoritative; the diagram only groups them):
 - `view-projection` (Phase 4 view tools — `dcc.RadioItems` with
   values `perspective` / `orthographic`; mirrors
   `state["projection"]` and the camera's `projection.type` in both
-  directions)
+  directions). A click mints `view-projection-ticket` at pointerdown.
+  An older ticket cannot overwrite a newer projection for that scene.
 - `crystal-graph`
 - `topology-histogram`
 - `topology-results`
@@ -616,7 +741,12 @@ The full list (authoritative; the diagram only groups them):
 - `mv-status-bar`, `mv-status-structure`, `mv-status-scope`,
   `mv-status-counts`, `mv-status-busy`: canvas status bar and the
   working/rendering indicator. Counts follow the scene drawn for the
-  current display mode and transforms.
+  current display mode and transforms. A rename refreshes
+  `mv-status-structure` from the live scene in the same round as the tab
+  strip (`scene-event-store`), without waiting for another
+  `agent-state-store` write or a scene switch. The sidebar
+  `#upload-status` line (`Loaded: …`) takes the scene display name from
+  the catalog event, including a same-scene rename; tab text is a projection.
 - `perf-log-level`: server-log level filter (`debug` shows all,
   `info` hides fast callbacks, `warn` and `error` are stricter)
 - `save-preset-btn`

@@ -6,6 +6,7 @@ help text those processes print. They do not use a wall-clock threshold.
 
 from __future__ import annotations
 
+import difflib
 import os
 import subprocess
 import sys
@@ -75,7 +76,100 @@ UNKNOWN_ERROR = (
     "(choose from render, inspect, capabilities, skills, serve, tui, operate)\n"
 )
 
-DASHDASH_ERROR = UNKNOWN_ERROR.replace("choice: nope ", "choice: -- ")
+_COMMANDS = (
+    "render",
+    "inspect",
+    "capabilities",
+    "skills",
+    "serve",
+    "tui",
+    "operate",
+)
+
+_ORACLE = r"""
+import argparse
+import contextlib
+import io
+import sys
+
+from mat_viewer.cli import (
+    _build_capabilities_parser,
+    _build_inspect_parser,
+    _build_operate_parser,
+    _build_render_parser,
+    _build_serve_parser,
+    _build_tui_parser,
+    main,
+)
+
+def _exit_code(exc: SystemExit) -> int:
+    if exc.code is None:
+        return 0
+    if isinstance(exc.code, int):
+        return exc.code
+    return 1
+
+
+def _capture(func) -> tuple[int, str, str]:
+    stdout, stderr = io.StringIO(), io.StringIO()
+    try:
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            func()
+    except SystemExit as exc:
+        if not isinstance(exc.code, (int, type(None))):
+            stderr.write(str(exc.code) + "\n")
+        return _exit_code(exc), stdout.getvalue(), stderr.getvalue()
+    return 0, stdout.getvalue(), stderr.getvalue()
+
+
+def _full_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="mat-vis",
+        description="MatterVis: publication-quality crystal structure visualization.",
+    )
+    subparsers = parser.add_subparsers(dest="command")
+    _build_render_parser(subparsers)
+    _build_inspect_parser(subparsers)
+    _build_capabilities_parser(subparsers)
+    subparsers.add_parser(
+        "skills",
+        help="Discover and read bundled Agent Skills.",
+    )
+    _build_serve_parser(subparsers)
+    _build_tui_parser(subparsers)
+    _build_operate_parser(subparsers)
+    return parser
+
+
+def _oracle(argv: list[str]) -> tuple[int, str, str]:
+    parser = _full_parser()
+
+    def run() -> None:
+        args = parser.parse_args(argv)
+        if args.command is None:
+            parser.print_help()
+            raise SystemExit(0)
+        raise SystemExit(f"oracle dispatched {args.command}")
+
+    return _capture(run)
+
+
+def _actual(argv: list[str]) -> tuple[int, str, str]:
+    return _capture(lambda: main(list(argv)))
+
+
+mode = sys.argv[1]
+argv = sys.argv[2:]
+if mode == "oracle":
+    code, stdout, stderr = _oracle(argv)
+elif mode == "actual":
+    code, stdout, stderr = _actual(argv)
+else:
+    raise SystemExit(f"unknown mode {mode}")
+sys.stdout.write(f"{code}\n")
+sys.stdout.write(stdout)
+sys.stderr.write(stderr)
+"""
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -168,16 +262,78 @@ def test_unknown_command_and_double_dash_keep_their_errors() -> None:
     assert _without_choice_quotes(_cli_stderr(unknown)) == UNKNOWN_ERROR
     assert _loaded(unknown) == set()
 
-    dashed = _run(["--", "render", "--help"])
-    if dashed.returncode == 0:
-        # Python 3.12.16 skips "--" and then selects the render parser.
-        assert "--backend" in dashed.stdout
-        assert "mat_viewer.render" in _loaded(dashed)
-    else:
-        assert dashed.returncode == 2
-        assert _without_choice_quotes(_cli_stderr(dashed)) == DASHDASH_ERROR
-
     version = _run(["--version"])
     assert version.returncode == 2
     assert "unrecognized arguments: --version" in version.stderr
     assert _loaded(version) == set()
+
+
+def _parser_outcome(mode: str, args: list[str]) -> tuple[int, str, str]:
+    env = os.environ.copy()
+    env["COLUMNS"] = "80"
+    result = subprocess.run(
+        [sys.executable, "-c", _ORACLE, mode, *args],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, (mode, args, result.returncode, result.stderr)
+    first, _, rest = result.stdout.partition("\n")
+    return int(first), rest, result.stderr
+
+
+def test_leading_double_dash_matches_the_fully_built_parser() -> None:
+    """A leading ``--`` must match every parser built on this interpreter.
+
+    Python 3.12.16 skips ``--`` and then selects the next command. Earlier
+    releases report ``--`` as an invalid choice. The baseline is that full
+    parser, not a second accepted result. A successful command help must be
+    the real parser text, so the old summary-only stub cannot pass.
+    """
+    cases = (
+        ["render", "--help"],
+        ["inspect", "--help"],
+        ["--", "render", "--help"],
+        ["--", "inspect", "--help"],
+        ["--"],
+        ["--", "not-a-command"],
+    )
+    markers = {"render": "--backend", "inspect": "--color-by"}
+    for args in cases:
+        oracle = _parser_outcome("oracle", args)
+        actual = _parser_outcome("actual", args)
+        if actual != oracle:
+            diff = "".join(
+                difflib.unified_diff(
+                    [*_outcome_lines(oracle)],
+                    [*_outcome_lines(actual)],
+                    fromfile="full-parser",
+                    tofile="mat-vis",
+                    n=2,
+                )
+            )
+            raise AssertionError(f"{args}\n{diff[:4000]}")
+        code, stdout, stderr = actual
+        combined = stdout + stderr
+        if "choose from" in combined:
+            clause = combined.split("choose from", 1)[1]
+            cursor = 0
+            for name in _COMMANDS:
+                found = clause.find(name, cursor)
+                assert found >= 0, (args, name, clause)
+                cursor = found + len(name)
+        if code == 0:
+            commands = [token for token in args if not token.startswith("-")]
+            assert commands, (args, stdout)
+            assert markers[commands[0]] in stdout
+            assert len(stdout) > 400
+        else:
+            assert code == 2, (args, code, stderr)
+
+
+def _outcome_lines(outcome: tuple[int, str, str]):
+    code, stdout, stderr = outcome
+    yield f"code {code}\n"
+    yield from stdout.splitlines(keepends=True)
+    yield from stderr.splitlines(keepends=True)

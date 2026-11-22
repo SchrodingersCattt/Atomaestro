@@ -228,6 +228,17 @@ late sync is dropped so it cannot put the previous controls back.
       var node = event.target;
       if (!node || !node.closest) return;
       if (node.closest("#rightclick-target-fallback")) return;
+      if (node.closest("#view-projection")) {
+        var label = node.closest("label");
+        var input = String(node.tagName || "").toUpperCase() === "INPUT"
+          ? node
+          : (label && label.querySelector ? label.querySelector("input") : null);
+        var chosen = input && input.value ? String(input.value) : "";
+        if (chosen) {
+          root.__mvProjectionTickets = Number(root.__mvProjectionTickets || 0) + 1;
+          root.__mvProjectionClick = {value: chosen, ticket: root.__mvProjectionTickets};
+        }
+      }
       noteInteraction(sceneIdFromNode(node));
     }, true);
 

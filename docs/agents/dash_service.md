@@ -732,7 +732,8 @@ The full list (authoritative; the diagram only groups them):
 - `view-projection` (Phase 4 view tools — `dcc.RadioItems` with
   values `perspective` / `orthographic`; mirrors
   `state["projection"]` and the camera's `projection.type` in both
-  directions)
+  directions). A click mints `view-projection-ticket` at pointerdown.
+  An older ticket cannot overwrite a newer projection for that scene.
 - `crystal-graph`
 - `topology-histogram`
 - `topology-results`

@@ -335,6 +335,7 @@ def interaction_fence_children():
     return (
         dcc.Store(id="ui-interaction-epoch", data=0),
         dcc.Store(id="ui-client-id", data=None),
+        dcc.Store(id="view-projection-ticket", data=None),
         html.Div(id="ui-interaction-sink", style={"display": "none"}),
     )
 

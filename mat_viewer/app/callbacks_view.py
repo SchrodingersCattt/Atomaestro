@@ -12,7 +12,12 @@ from .editor_transforms import *
 from .rightclick import *
 from ..cache_keys import topology_side_panel_cache_key
 from .view_updates import UpdateKind, classify_change, make_update, mounted_scene_id
-from .projection_controls import selected_scene_projection, triggered_component_ids
+from .projection_controls import (
+    accept_projection_ticket,
+    projection_command,
+    selected_scene_projection,
+    triggered_component_ids,
+)
 from .backend import ViewerBackend
 
 
@@ -544,28 +549,40 @@ def register_view_callbacks(app, backend):
         Input("agent-state-store", "data"),
         Input("scene-tabs", "value"),
         Input("view-projection", "value"),
+        Input("view-projection-ticket", "data"),
         prevent_initial_call=True,
     )
-    def sync_view_projection_from_state(state, scene_tab, projection=None):
+    def sync_view_projection_from_state(state, scene_tab, projection=None, ticket=None):
         # One callback owns radio reads and writes, so a user click supersedes
         # an older in-flight state response without a cross-callback cycle.
+        # The ticket, not the radio value, is the ordered click. A raw radio
+        # change waits for that ticket so a slow earlier click cannot land
+        # after a newer one.
         triggered_ids = triggered_component_ids(callback_context)
-        if "scene-tabs" in triggered_ids or "view-projection" not in triggered_ids:
+        if "scene-tabs" in triggered_ids or (
+            "view-projection" not in triggered_ids
+            and "view-projection-ticket" not in triggered_ids
+        ):
             radio = selected_scene_projection(
                 backend, state, scene_tab, tab_changed="scene-tabs" in triggered_ids
             )
             return no_update, no_update, no_update, radio
-        if not projection or not scene_tab or scene_tab not in backend.scene_store.scenes:
+        if "view-projection-ticket" not in triggered_ids:
+            return (no_update,) * 4
+        command, command_ticket = projection_command(ticket, projection)
+        if not command or not scene_tab or scene_tab not in backend.scene_store.scenes:
             return (no_update,) * 4
         scene_id = scene_tab
+        if not accept_projection_ticket(scene_id, command_ticket):
+            return (no_update,) * 4
         # Skip the redraw if the user clicked the radio that was
         # already selected -- avoids ratcheting the figure JSON cache
         # for a no-op.
         current = backend.get_state(scene_id).get("projection", "perspective")
-        if str(projection) == str(current):
+        if str(command) == str(current):
             return (no_update,) * 4
         try:
-            camera = backend.set_projection(projection, scene_id=scene_id, broadcast=False)
+            camera = backend.set_projection(command, scene_id=scene_id, broadcast=False)
         except Exception:  # pragma: no cover
             return (no_update,) * 4
         state = backend.get_state(scene_id)

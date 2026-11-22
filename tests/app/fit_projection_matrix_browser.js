@@ -84,6 +84,7 @@ async function fit(page, projection, boundary) {
       revision: Number(state.camera_revision || 0),
     };
   });
+  expected.boundary = !!boundary;
   expected.eyeVec = [Number(serverEye.x), Number(serverEye.y), Number(serverEye.z)];
   expected.eye = Math.hypot(...expected.eyeVec);
   expected.centerVec = [Number(serverCenter.x), Number(serverCenter.y), Number(serverCenter.z)];
@@ -120,6 +121,20 @@ async function fit(page, projection, boundary) {
           if (Math.abs(aspectLive[index] - target.aspect[index]) / Math.max(target.aspect[index], 1e-6) > 0.01) ok = false;
         }
         if (render && Number(render.camera_revision) < target.revision) ok = false;
+      }
+      /* The fitted ranges can land on the previous figure, whose cell
+       * traces are still hidden. The painted contract is the cell the
+       * checkbox asked for, so the camera match waits for that trace. */
+      if (ok && target.boundary) {
+        const traces = gd.data || [];
+        let cell = false;
+        for (let index = 0; index < traces.length && !cell; index += 1) {
+          const trace = traces[index];
+          const meta = trace && trace.meta;
+          const role = meta && (meta.mv_role || meta.role);
+          cell = role === "unit_cell" && trace.visible !== false;
+        }
+        if (!cell) ok = false;
       }
       return {
         ok,

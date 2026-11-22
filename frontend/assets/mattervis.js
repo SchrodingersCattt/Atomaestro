@@ -1797,6 +1797,26 @@
         }
         const allowCamera = name === "relayout" && layout && (layout["scene.camera"] || (layout.scene && layout.scene.camera) ||
           Object.keys(layout).some(function (key) { return key.indexOf("scene.camera.") === 0; }));
+        /* The gl eye can already show the orbit while the stored sample
+         * still holds the pre-drag pose. Sample the displayed camera at
+         * the moment this relayout is requested, then put that eye back
+         * before the promise the caller is awaiting resolves. A restore
+         * relayout sets __mvRestoringDrag first, so it does not sample
+         * the eye it is in the process of replacing. */
+        const captureDrag = !!(
+          allowCamera && target && !target.__mvRestoringDrag && sameSceneDragInProgress(target)
+        );
+        if (captureDrag && typeof window.__mvNoteInProgressDrag === "function") {
+          window.__mvNoteInProgressDrag(target);
+        }
+        function withDragRestore(result) {
+          if (!captureDrag || typeof window.__mvRestoreInProgressDrag !== "function") {
+            return Promise.resolve(result);
+          }
+          return Promise.resolve(window.__mvRestoreInProgressDrag(target)).then(function () {
+            return result;
+          });
+        }
         const queueState = target && target.__mvRenderQueueState;
         if (allowCamera && queueState && queueState.running && !queueState.reentrantToken && !queueState.parked) {
           return enqueueRender(target, function () {
@@ -1805,7 +1825,7 @@
             if (window.MatterVisViewCamera && typeof window.MatterVisViewCamera.installContextLoss === "function") {
               window.MatterVisViewCamera.installContextLoss(target);
             }
-            return result;
+            return withDragRestore(result);
           });
         }
         if (allowCamera) holdCameraRelayout();
@@ -1823,7 +1843,7 @@
           if (window.MatterVisViewCamera && typeof window.MatterVisViewCamera.installContextLoss === "function") {
             window.MatterVisViewCamera.installContextLoss(target);
           }
-          return result;
+          return withDragRestore(result);
         }, function (err) {
           clearCameraAllow();
           throw err;
@@ -3378,9 +3398,53 @@
     }
     if (window.__mvCensus) window.__mvCensus.webglContexts = trackedGL.length;
   }
+  /* The boundary checkbox can flip before the figure that was built for
+   * the previous option is replaced. Restyle the cell traces that are
+   * already on the canvas so a fitted camera is not painted around a
+   * hidden box. A figure that has no cell trace yet is left alone; the
+   * next complete frame carries the box. */
+  function syncCellBoundaryVisibility(gd) {
+    const box = document.querySelector("#display-options input[value='unit_cell_box']");
+    if (!box || !gd || !gd.data || !window.Plotly || typeof window.Plotly.restyle !== "function") return;
+    if (gd.__mvCellBoundarySync) return;
+    const want = !!box.checked;
+    const indices = [];
+    const values = [];
+    for (let index = 0; index < gd.data.length; index += 1) {
+      const trace = gd.data[index];
+      const meta = trace && trace.meta;
+      const role = meta && (meta.mv_role || meta.role);
+      if (role !== "unit_cell") continue;
+      const shown = !trace || trace.visible !== false;
+      if (shown === want) continue;
+      indices.push(index);
+      values.push(want);
+    }
+    if (!indices.length) return;
+    gd.__mvCellBoundarySync = true;
+    let pending = null;
+    try {
+      pending = window.Plotly.restyle(gd, {visible: values}, indices);
+    } catch (_) {
+      gd.__mvCellBoundarySync = false;
+      return;
+    }
+    const clear = function () { gd.__mvCellBoundarySync = false; };
+    if (pending && typeof pending.then === "function") pending.then(clear, clear);
+    else clear();
+  }
+  function bindCellBoundarySync() {
+    const box = document.querySelector("#display-options input[value='unit_cell_box']");
+    if (!box || box.__mvCellBoundaryBound) return;
+    box.__mvCellBoundaryBound = true;
+    box.addEventListener("change", function () {
+      syncCellBoundaryVisibility(graphDiv());
+    });
+  }
   function rebindAll() {
     prunePersistentTargets();
     bindRightClick();
+    bindCellBoundarySync();
     bindBoxSelect();
     bindDisorderHover();
     bindSceneTabIntent();
@@ -3388,6 +3452,7 @@
     syncSceneTabSelection(true);
     flushQueuedSceneFigure();
     const gd = graphDiv();
+    syncCellBoundaryVisibility(gd);
     releaseStaleWebGL(gd);
     if (gd && window.MatterVisViewCamera && typeof window.MatterVisViewCamera.installWheelZoom === "function") {
       window.MatterVisViewCamera.installWheelZoom(gd);
@@ -3399,6 +3464,7 @@
         restoreOwnedCamera(gestureGeneration, foreignGuardScene());
       });
       gd.on("plotly_afterplot", function () {
+        if (typeof syncCellBoundaryVisibility === "function") syncCellBoundaryVisibility(gd);
         if (window.__mvRestoreInProgressDrag) window.__mvRestoreInProgressDrag(gd);
       });
     }
@@ -3649,10 +3715,15 @@
       }, 500);
     }
   }
-  document.addEventListener("pointermove", function () {
+  function sampleDragFromPointer() {
     const gd = graphDiv();
     if (gd && window.__mvNoteInProgressDrag) window.__mvNoteInProgressDrag(gd);
-  }, true);
+  }
+  document.addEventListener("pointermove", sampleDragFromPointer, true);
+  /* Plotly's orbit listens for mouse events. A move that updates the gl
+   * eye without a pointermove must still store that eye before a later
+   * relayout copies the pre-orbit pose back. */
+  document.addEventListener("mousemove", sampleDragFromPointer, true);
   document.addEventListener("pointerdown", function(e) {
     if (!inGraph(e.target)) return;
     window.__mvUnadoptedWheel = null;

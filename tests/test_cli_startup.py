@@ -59,13 +59,23 @@ options:
   -h, --help            show this help message and exit
 """
 
+def _without_choice_quotes(text: str) -> str:
+    """Drop quotes around argparse choices.
+
+    Python 3.12.16 prints ``choose from render, inspect`` while 3.10, 3.11,
+    and earlier 3.12 prints ``choose from 'render', 'inspect'``. The command
+    names and the rejected token stay the same.
+    """
+    return text.replace("'", "")
+
+
 UNKNOWN_ERROR = (
     "usage: mat-vis [-h] {render,inspect,capabilities,skills,serve,tui,operate} ...\n"
-    "mat-vis: error: argument command: invalid choice: 'nope' "
-    "(choose from 'render', 'inspect', 'capabilities', 'skills', 'serve', 'tui', 'operate')\n"
+    "mat-vis: error: argument command: invalid choice: nope "
+    "(choose from render, inspect, capabilities, skills, serve, tui, operate)\n"
 )
 
-DASHDASH_ERROR = UNKNOWN_ERROR.replace("'nope'", "'--'")
+DASHDASH_ERROR = UNKNOWN_ERROR.replace("choice: nope ", "choice: -- ")
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -155,12 +165,12 @@ def test_render_help_still_loads_the_render_parser() -> None:
 def test_unknown_command_and_double_dash_keep_their_errors() -> None:
     unknown = _run(["nope"])
     assert unknown.returncode == 2
-    assert _cli_stderr(unknown) == UNKNOWN_ERROR
+    assert _without_choice_quotes(_cli_stderr(unknown)) == UNKNOWN_ERROR
     assert _loaded(unknown) == set()
 
     dashed = _run(["--", "render", "--help"])
     assert dashed.returncode == 2
-    assert _cli_stderr(dashed) == DASHDASH_ERROR
+    assert _without_choice_quotes(_cli_stderr(dashed)) == DASHDASH_ERROR
     assert _loaded(dashed) == set()
 
     version = _run(["--version"])

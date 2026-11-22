@@ -5,76 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-
-def add_session_arguments(parser: argparse.ArgumentParser) -> None:
-    """Add machine-readable terminal rendering and session options."""
-    parser.add_argument(
-        "--hydrogen",
-        action="store_true",
-        default=False,
-        help="Draw hydrogen atoms. Hidden by default so heavy atoms stay readable.",
-    )
-    parser.add_argument(
-        "--boundary",
-        action="store_true",
-        default=False,
-        help="Draw periodic boundary replicas. Hidden by default.",
-    )
-    parser.add_argument(
-        "--charset",
-        choices=("unicode", "ascii7"),
-        default="unicode",
-        help="Static/session glyph set (default: unicode; ascii7 implies monochrome).",
-    )
-    parser.add_argument(
-        "--session-format",
-        choices=("jsonl",),
-        default=None,
-        help="Keep one stateful session on stdin/stdout using newline-delimited JSON.",
-    )
-    parser.add_argument(
-        "--repeat", type=int, nargs=3, metavar=("NA", "NB", "NC"), default=None,
-        help="Show an NA x NB x NC supercell instead of one unit cell.",
-    )
-    parser.add_argument(
-        "--grow-radius", type=float, default=None, metavar="ANGSTROM",
-        help="Add periodic images of atoms within this distance of the cell contents.",
-    )
-    parser.add_argument("--parallax", action="store_true", help="Experimental previous-rotation ghost (off by default).")
-    parser.add_argument("--no-depth", action="store_true", help="Hide textual depth-band suffixes.")
-    parser.add_argument("--slice-axis", choices=("off", "depth", "a", "b", "c"), default="off")
-    parser.add_argument("--slice-index", type=int, default=0)
-    parser.add_argument("--slice-width", type=float, default=1.0, help="Layer width in Angstrom (depth) or fractional coordinates (a/b/c).")
-    parser.add_argument(
-        "--axes", action=argparse.BooleanOptionalAction, default=True,
-        help="Fit the scene above a bottom row with an a/b/c triad and a scale bar.",
-    )
-    parser.add_argument(
-        "--renderer",
-        default=None,
-        help=(
-            "Terminal frame renderer id. Default mattervis.native-v1 keeps "
-            "today's picture. A missing or incompatible id fails closed."
-        ),
-    )
-    parser.add_argument(
-        "--renderer-config",
-        default=None,
-        metavar="FILE",
-        help=(
-            "JSON renderer config (mattervis.tui.renderer_config/v1): options, "
-            "bond policy, and optional package/digest pins."
-        ),
-    )
-    parser.add_argument(
-        "--observation-profile",
-        choices=("legacy", "model"),
-        default="legacy",
-        help=(
-            "JSONL observation profile. legacy is unchanged. model drops "
-            "chemistry warnings, formulas, and the source title."
-        ),
-    )
+from ..cli_lazy import add_session_arguments
 
 
 def prepare_tui_renderer(args: argparse.Namespace):

@@ -221,15 +221,21 @@
     }
     var sameScene = !scene || !render.scene_id || String(scene) === String(render.scene_id);
     var expected = complete && scene ? expectedScene(String(scene)) : null;
+    var switchingScene = !!(complete && scene && render.scene_id && String(scene) !== String(render.scene_id));
     if (expected) {
       if (expected.scene_generation !== undefined && expected.scene_generation !== null &&
           String(frame.scene_generation || "") !== String(expected.scene_generation)) return false;
       var incomingRevision = Number(frame.render_revision || frame.geometry_version || frame.geometry || 0);
       if (expected.render_revision !== null && expected.render_revision !== undefined &&
           (!Number.isFinite(incomingRevision) || incomingRevision < Number(expected.render_revision))) return false;
-      var incomingCamera = Number(frame.camera_revision || frame.camera_version || 0);
-      if (expected.camera_revision !== null && expected.camera_revision !== undefined &&
-          incomingCamera < Number(expected.camera_revision)) return false;
+      /* The geometry body can be older than the confirmed camera when the
+       * canvas is still another scene. The camera envelope paints the pose
+       * after this frame. On the same scene, an older camera stays stale. */
+      if (!switchingScene) {
+        var incomingCamera = Number(frame.camera_revision || frame.camera_version || 0);
+        if (expected.camera_revision !== null && expected.camera_revision !== undefined &&
+            incomingCamera < Number(expected.camera_revision)) return false;
+      }
     }
     var seen = remembered(update, gd);
     var current = Math.max(Number(render.geometry_version || render.render_revision || 0), seen.geometry);

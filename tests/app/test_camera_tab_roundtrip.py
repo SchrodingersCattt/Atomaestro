@@ -112,3 +112,57 @@ def test_delivered_figure_follows_a_refit_of_an_offscreen_camera(tmp_path: Path)
         assert _eye(delivered["figure"])["x"] == refit["camera"]["eye"]["x"]
     finally:
         backend.close()
+
+
+def test_scene_resync_returns_geometry_ahead_of_a_later_camera_command(tmp_path: Path):
+    """A camera command must not be the only row a tab resync can paint.
+
+    The current-frame filter hides the geometry body after camera_revision
+    moves, and that body must stay hidden from latest_figure_broadcast. The
+    scene-scoped journal read puts the matching body back in front of the
+    confirmed camera envelope.
+    """
+    from flask import Flask
+
+    from mat_viewer.api import v2_state
+
+    backend = _backend(tmp_path)
+    routes: dict = {}
+
+    class _V2:
+        def _register(self, path):
+            def register(fn):
+                routes[path] = fn
+                return fn
+
+            return register
+
+        get = _register
+        post = _register
+
+    try:
+        scene_id = backend.active_scene_id()
+        state = backend.get_state(scene_id)
+        published = {
+            "data": [{"type": "scatter3d", "x": [0], "y": [0], "z": [0]}],
+            "layout": {"scene": {"camera": {"eye": {"x": 1, "y": 1, "z": 1}}}},
+        }
+        backend.broadcast_figure(scene_id=scene_id, figure=published, state=state)
+        revision = int(state.get("camera_revision", 0) or 0)
+        backend.patch_state(
+            {"camera": FRAMED, "camera_revision": revision + 1},
+            scene_id=scene_id,
+            broadcast=True,
+        )
+        assert backend.latest_figure_broadcast(scene_id) is None
+        v2_state.register_state_routes(_V2(), backend)
+        app = Flask(__name__)
+        with app.test_request_context(f"/api/v2/view-updates?since=0&scene_id={scene_id}"):
+            body = routes["/view-updates"]().get_json()
+        updates = body["updates"]
+        assert updates[0]["type"] == "figure"
+        assert updates[0]["figure"] == published
+        assert updates[-1]["update_kind"] == "camera"
+        assert body["pending"] is False
+    finally:
+        backend.close()

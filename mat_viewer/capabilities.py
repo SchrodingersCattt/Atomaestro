@@ -31,11 +31,19 @@ MOLCRYSKIT_SOURCE_MINIMUM = MOLCRYSKIT_MINIMUM
 # runtime requirements; released installs stay on this range once the
 # role/regime API is published.
 MOLCRYSKIT_INSTALL = f'python -m pip install "{MOLCRYSKIT_REQUIREMENT}"'
-# Development pin for find_polyhedra disorder_policy. pyproject.toml must
-# name this same commit. Restore a release range once the API is on PyPI.
-MOLCRYSKIT_SOURCE_COMMIT = "ee45c7e7c9e44f50b0b55ed46ee5dca306550541"
+# Development pin shared by Mercury import and the phone snapshot.
+# 2a3ee11 is the authorized pin, not MolCrysKit main and not tip
+# 7b859dd. It includes Mercury read_mryx 0702ed8d, lightweight CIF /
+# phone-site a4080132, and the label bound that discards unselected
+# structures. Do not retarget this URL to 7b859dd.
+# The desktop extra supplies ASE, pymatgen, SciPy, spglib, and defusedxml;
+# read_mryx imports defusedxml from that extra. pyproject.toml must name
+# this same requirement. The constraint file repeats the commit URL without
+# the extra marker because pip 26 rejects extras in constraints.
+# Restore a release range once those APIs are on PyPI.
+MOLCRYSKIT_SOURCE_COMMIT = "2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6"
 MOLCRYSKIT_DEVELOPMENT_REQUIREMENT = (
-    "molcrys-kit @ git+https://github.com/SchrodingersCattt/MolCrysKit.git@"
+    "molcrys-kit[desktop] @ git+https://github.com/SchrodingersCattt/MolCrysKit.git@"
     f"{MOLCRYSKIT_SOURCE_COMMIT}"
 )
 # Backward-compatible names retained for callers of the pre-0.7 helpers.
@@ -245,10 +253,22 @@ def gpu_probe() -> dict[str, object]:
         else:
             adapter_payload = {"summary": str(summary or adapter)}
         result["adapter"] = adapter_payload
-        adapter_type = str(
-            adapter_payload.get("adapter_type", adapter_payload.get("type", ""))
-        ).lower()
-        result["hardware_accelerated"] = adapter_type not in {
+        info = getattr(adapter, "info", None)
+        info_get = getattr(info, "get", None)
+        if callable(info_get):
+            adapter_type = str(info_get("adapter_type") or info_get("type") or "")
+            device_name = info_get("device")
+        else:
+            adapter_type = str(getattr(info, "adapter_type", "") or "")
+            device_name = getattr(info, "device", None)
+        if not adapter_type:
+            adapter_type = str(
+                adapter_payload.get("adapter_type", adapter_payload.get("type", ""))
+            )
+        if device_name:
+            adapter_payload["device"] = str(device_name)
+            adapter_payload["adapter_type"] = adapter_type
+        result["hardware_accelerated"] = adapter_type.lower() not in {
             "", "cpu", "software", "unknown"
         }
         request_device = getattr(adapter, "request_device_sync", None)
@@ -287,7 +307,9 @@ CAPABILITY_REGISTRY: Mapping[str, CapabilitySpec] = {
             "Requires BondRecord.role and "
             "MolecularCrystal.get_connectivity_report(). "
             f"The published window is {MOLCRYSKIT_REQUIREMENT} once that "
-            "API is on PyPI. This checkout pins the commit in pyproject.toml; "
+            "API is on PyPI. This checkout pins the desktop extra of the "
+            "commit in pyproject.toml. That extra supplies ASE, pymatgen, "
+            "SciPy, spglib, and defusedxml; core MolCrysKit does not. "
             "PyPI 0.8.0 does not provide those fields."
         ),
     ),
@@ -555,17 +577,17 @@ def requirements_for_render(output: str, backend: str = "cpu") -> tuple[str, ...
             raise ValueError(
                 "backend must be 'cpu', 'matplotlib', 'plotly', or 'gpu'"
             )
-    if backend_name == "gpu" and suffix != "png":
+    if backend_name == "gpu" and suffix not in {"png", "gif", "mp4"}:
         raise ValueError(
-            "GPU backend currently supports PNG output only; "
+            "GPU backend supports PNG, GIF, and MP4; "
             f"{suffix.upper()} is not supported"
         )
     if suffix == "html" and backend_name != "plotly":
         raise ValueError("HTML output requires --backend plotly")
     if backend_name == "matplotlib" and suffix not in {"png", "pdf", "svg"}:
         raise ValueError("Matplotlib output must be PNG, PDF, or SVG")
-    if suffix in {"gif", "mp4"} and backend_name != "cpu":
-        raise ValueError("GIF/MP4 output requires --backend cpu")
+    if suffix in {"gif", "mp4"} and backend_name not in {"cpu", "gpu"}:
+        raise ValueError("GIF/MP4 output requires --backend cpu or --backend gpu")
 
     required: list[str] = [suffix]
     if backend_name == "plotly":

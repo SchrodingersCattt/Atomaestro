@@ -38,9 +38,11 @@ flowchart TB
 
 Display, Analysis, and Operate are separate effects. Display changes a
 view. Analysis reads one immutable snapshot. Operate commits a new
-structure revision through `EffectSession`. The legacy `supercell`
-shorthand remains a display repeat. Details and the structural
-commands are in
+structure revision through `EffectSession`. The commit checks
+`expected_revision` and saves `.local/effect-session.json` under one
+file lock, so two processes cannot both publish the same revision. The
+legacy `supercell` shorthand remains a display repeat. Details and the
+structural commands are in
 [display-operate-analysis.md](architecture/display-operate-analysis.md).
 
 ## Ownership
@@ -90,12 +92,21 @@ at the operation that needs them:
 - terminal UI: `matter-vis[tui]`;
 - Cube isosurfaces: `matter-vis[cube]`;
 - GIF/MP4 encoding: `matter-vis[animation]`.
-- native offscreen opaque PNG: `matter-vis[gpu]` (wgpu; runtime device probe required).
+- native offscreen PNG/GIF/MP4: `matter-vis[gpu]` (wgpu; runtime device probe required; GIF/MP4 also need `matter-vis[animation]`).
 
-The GPU backend is explicit and PNG-only in its first release. It lowers the
-same immutable `RenderPlan`, rejects transparent, dashed, depth-disabled, and
-text primitives before device submission, and never substitutes the CPU
-renderer when the optional dependency or device is unavailable. CPU PNG and
+The GPU backend is explicit. It lowers the same immutable `RenderPlan`,
+draws opaque meshes and instanced spheres, cylinders, and solid ellipsoids,
+and composites depth-disabled lines together with lines that are not one
+pixel wide, using each viewport's own camera and pixel crop. That composite
+is an intended line pass. A depth-disabled stroke stays in front of a
+depth-tested one, and a depth-tested stroke is hidden where the GPU depth
+is nearer. The backend does not apply CPU supersampling or the CPU sphere
+and cylinder tessellation controls. It does not evaluate surface-material
+coefficients or lighting rigs other than the historical matte `studio_soft`
+shade; any other preset or rig raises `GPUUnsupportedError` instead of
+being drawn as that shade. Transparent primitives, dashed lines, and text
+are rejected. It never substitutes the CPU renderer when the optional
+dependency, the device, or a primitive is unavailable. CPU PNG and
 true-vector PDF/SVG remain the reference paths.
 
 Cube isosurface meshes carry one shading record copied from the
@@ -130,9 +141,13 @@ those journal envelopes over the existing WebSocket, falling back to
 `GET /api/v2/view-updates`. Scene-list changes travel in the same snapshot
 and journal as `scene_catalog`. The page rebuilds the existing tab strip
 and keeps the selected tab unless the caller explicitly focuses a scene,
-the selected scene has been removed, or this page clicked Duplicate. That
-click selects the new scene on this page only. Other pages keep their tab
-because the catalog is published with `focus: false`. Control widgets follow the existing
+the selected scene has been removed, this page clicked Duplicate, or this
+page committed a structural supercell. Duplicate and Commit each select
+the new scene on this page only. Other pages keep their tab because the
+catalog is published with `focus: false`. Commit names the shared-history
+operand revision. When the visible scene is an older revision of that
+same structure, Commit does not run and the status names both revisions.
+Control widgets follow the existing
 agent-state poll, which re-reads the selected scene when its version clocks
 move. In-process GUI edits that already own the gesture do not echo that
 gesture back through the poll.
@@ -205,3 +220,16 @@ clean. A mutation that arrives during the replace stays dirty. A final
 flush that leaves the store dirty raises `SceneStorePersistError`.
 The lock order, the bounds, and the root cause of the shutdown hang
 are in `docs/reliability-worker-shutdown.md`.
+
+
+### Mercury import ownership
+
+`loader/mryx_adapter.py` consumes MolCrysKit `read_mryx_atoms` output and feeds
+the existing ASE/canonical bundle pipeline. The dependency is the `desktop`
+extra of the commit named in `pyproject.toml`, because `read_mryx` imports
+defusedxml from that extra. Container/XML parsing and structural
+semantics live only upstream. Native MRYX uploads use the existing asynchronous
+job and filename-safety path, selecting the first stored structure; frame-aware
+loaders expose the ordered document. The adapter still asks upstream for every
+stored structure up front, so MRYX iteration is not a bounded-memory stream.
+See [input limitations](mryx.md).

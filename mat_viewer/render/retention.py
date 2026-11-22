@@ -414,6 +414,35 @@ def remember_plain_lru(
         return ordered
 
 
+def remember_analyze_topology(bundle: Any, cache: dict, key: Any, value: Any) -> dict:
+    """Keep one topology result inside the analyze-cache budget.
+
+    The bundle may reject attribute writes. The caller still uses ``value``.
+    """
+
+    sizes = getattr(bundle, "_analyze_topology_cache_nbytes", None)
+    if not isinstance(sizes, dict):
+        sizes = {}
+        try:
+            bundle._analyze_topology_cache_nbytes = sizes
+        except Exception:
+            pass
+    ordered = remember_plain_lru(
+        cache,
+        key,
+        value,
+        sizes,
+        max_entries=ANALYZE_TOPOLOGY_CACHE_MAX_ENTRIES,
+        max_bytes=ANALYZE_TOPOLOGY_CACHE_MAX_BYTES,
+        measure=payload_nbytes,
+    )
+    try:
+        bundle._analyze_topology_cache = ordered
+    except Exception:
+        pass
+    return ordered
+
+
 def touch_plain_lru(cache: dict | None, key: Any) -> None:
     if isinstance(cache, OrderedDict) and key in cache:
         cache.move_to_end(key)

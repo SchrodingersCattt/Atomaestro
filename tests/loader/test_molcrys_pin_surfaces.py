@@ -1,8 +1,8 @@
 """The shared MolCrysKit pin keeps both parent surfaces.
 
 ``2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6`` is the authorized pin. It
-includes lightweight CIF commit ``a4080132``, Mercury ``read_mryx`` commit
-``0702ed8d``, and the label bound that discards unselected structures. It
+includes Mercury ``read_mryx`` commit ``0702ed8d``, lightweight CIF commit
+``a4080132``, and the label bound that discards unselected structures. It
 is not MolCrysKit main and not tip ``7b859dd``.
 ``read_mryx`` imports ``defusedxml`` from the desktop extra, so a core-only
 install of this commit fails here.

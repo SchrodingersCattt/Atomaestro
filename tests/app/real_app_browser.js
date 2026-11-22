@@ -38,7 +38,6 @@ async function settledView(page) {
     return !working && !rendering;
   }, null, {timeout: 20000});
 }
-
 async function graphReady(page) {
   await page.waitForFunction(() => {
     const gd = document.querySelector("#crystal-graph .js-plotly-plot");

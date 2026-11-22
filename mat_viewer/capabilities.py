@@ -31,10 +31,10 @@ MOLCRYSKIT_SOURCE_MINIMUM = MOLCRYSKIT_MINIMUM
 # runtime requirements; released installs stay on this range once the
 # role/regime API is published.
 MOLCRYSKIT_INSTALL = f'python -m pip install "{MOLCRYSKIT_REQUIREMENT}"'
-# Development pin shared by the phone snapshot and Mercury import.
+# Development pin shared by Mercury import and the phone snapshot.
 # 2a3ee11 is the authorized pin, not MolCrysKit main and not tip
-# 7b859dd. It includes lightweight CIF / phone-site a4080132, Mercury
-# read_mryx 0702ed8d, and the label bound that discards unselected
+# 7b859dd. It includes Mercury read_mryx 0702ed8d, lightweight CIF /
+# phone-site a4080132, and the label bound that discards unselected
 # structures. Do not retarget this URL to 7b859dd.
 # The desktop extra supplies ASE, pymatgen, SciPy, spglib, and defusedxml;
 # read_mryx imports defusedxml from that extra. pyproject.toml must name
@@ -253,10 +253,22 @@ def gpu_probe() -> dict[str, object]:
         else:
             adapter_payload = {"summary": str(summary or adapter)}
         result["adapter"] = adapter_payload
-        adapter_type = str(
-            adapter_payload.get("adapter_type", adapter_payload.get("type", ""))
-        ).lower()
-        result["hardware_accelerated"] = adapter_type not in {
+        info = getattr(adapter, "info", None)
+        info_get = getattr(info, "get", None)
+        if callable(info_get):
+            adapter_type = str(info_get("adapter_type") or info_get("type") or "")
+            device_name = info_get("device")
+        else:
+            adapter_type = str(getattr(info, "adapter_type", "") or "")
+            device_name = getattr(info, "device", None)
+        if not adapter_type:
+            adapter_type = str(
+                adapter_payload.get("adapter_type", adapter_payload.get("type", ""))
+            )
+        if device_name:
+            adapter_payload["device"] = str(device_name)
+            adapter_payload["adapter_type"] = adapter_type
+        result["hardware_accelerated"] = adapter_type.lower() not in {
             "", "cpu", "software", "unknown"
         }
         request_device = getattr(adapter, "request_device_sync", None)
@@ -565,17 +577,17 @@ def requirements_for_render(output: str, backend: str = "cpu") -> tuple[str, ...
             raise ValueError(
                 "backend must be 'cpu', 'matplotlib', 'plotly', or 'gpu'"
             )
-    if backend_name == "gpu" and suffix != "png":
+    if backend_name == "gpu" and suffix not in {"png", "gif", "mp4"}:
         raise ValueError(
-            "GPU backend currently supports PNG output only; "
+            "GPU backend supports PNG, GIF, and MP4; "
             f"{suffix.upper()} is not supported"
         )
     if suffix == "html" and backend_name != "plotly":
         raise ValueError("HTML output requires --backend plotly")
     if backend_name == "matplotlib" and suffix not in {"png", "pdf", "svg"}:
         raise ValueError("Matplotlib output must be PNG, PDF, or SVG")
-    if suffix in {"gif", "mp4"} and backend_name != "cpu":
-        raise ValueError("GIF/MP4 output requires --backend cpu")
+    if suffix in {"gif", "mp4"} and backend_name not in {"cpu", "gpu"}:
+        raise ValueError("GIF/MP4 output requires --backend cpu or --backend gpu")
 
     required: list[str] = [suffix]
     if backend_name == "plotly":

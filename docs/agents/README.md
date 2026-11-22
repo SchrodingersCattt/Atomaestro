@@ -55,6 +55,7 @@ The same routing as a quick table:
 | Control a local terminal view, select stable atom IDs, or run a stateful Python/JSONL agent session | [`tui_api.md`](tui_api.md) |
 | Select an external terminal frame renderer without forking Atomaestro | [`tui_renderer_api.md`](tui_renderer_api.md) |
 | Read terminal pictures with element symbols, molecule silhouettes, text depth bands, crossing-bond gaps, layer slicing, and optional rotation parallax | [`tui_api.md`](tui_api.md) |
+| Import Mercury MRYX stored sites through MolCrysKit (read-only, explicit limitations) | [`../mryx.md`](../mryx.md) |
 | Render CIF, Cube, VASP, XYZ, ASE trajectory, or LAMMPS files from the CLI | [`../cli.md`](../cli.md) |
 | Choose `vdw` (MolCrysKit/Bondi radii) or `flat_illustration` without changing the default ball-and-stick look | [`../cli.md`](../cli.md) and [`scene_api.md`](scene_api.md) |
 | Label trajectory frames with physical simulation time while keeping playback FPS independent | [`../cli.md`](../cli.md#frames-and-animations) |
@@ -76,7 +77,7 @@ The same routing as a quick table:
 | Recolour, hide, restyle, thin out, or fade chemical bonds by selector from API or CLI | [`bond_groups_api.md`](bond_groups_api.md) |
 | Draw styled, depth-tested display-only bond hints without changing chemical connectivity | [`scene_api.md#display-only-bond-annotations`](scene_api.md#display-only-bond-annotations) |
 | Repeat a unit cell, grow by radius / bonds, complete fragments / polyhedra, or generate a slab | [`transforms_api.md`](transforms_api.md) |
-| Commit a structural supercell, slab, insertion, deletion, substitution, hydrogen, solvent, cluster, or disorder candidate | [`effects_api.md`](effects_api.md) |
+| Commit a structural supercell, slab, insertion, deletion, substitution, hydrogen, solvent, cluster, or disorder candidate. The committing page selects the supercell result from the typed commit payload once the catalog lists it | [`effects_api.md`](effects_api.md) |
 | Feed an Android/phone client a transport snapshot (`schema` `mattervis.phone.snapshot.v1`), choose disorder with assembly-aware `disorder_selection` or the global display filter `disorder_group`, or commit the major component and get its P1 CIF | [`../architecture/display-operate-analysis.md#phone-snapshots`](../architecture/display-operate-analysis.md#phone-snapshots) |
 | Generate a bounded, ordered set of disorder candidates (enumerate or seeded random), each with a transport snapshot and P1 CIF, for Android preview/export | [`../architecture/display-operate-analysis.md#multiple-ordered-disorder-candidates`](../architecture/display-operate-analysis.md#multiple-ordered-disorder-candidates) |
 | Preview and commit atom/molecule coordinate edits or revision-local bond perception | [`effects_api.md`](effects_api.md) |
@@ -84,7 +85,7 @@ The same routing as a quick table:
 | Wrap displayed unit-cell atoms into the home cell, including bond-context images that stay aligned across lattice translations, without changing source coordinates | [`scene_api.md`](scene_api.md) |
 | Draw unit-cell ball-and-stick sticks from MolCrysKit bond role and connectivity regime | [`scene_api.md`](scene_api.md) |
 | Audit which backend-neutral render controls are available from the CLI | [`cli-api-parity.md`](cli-api-parity.md) |
-| Use the optional native offscreen GPU PNG backend | [`gpu_backend.md`](gpu_backend.md) |
+| Use the optional native GPU backend for PNG, GIF, and MP4 | [`gpu_backend.md`](gpu_backend.md) |
 | Choose CPU lighting (`studio_soft`, `unlit`) without changing the mesh/flat technique | [`lighting.md`](lighting.md) |
 | Read or override global Atomaestro defaults | [`config_api.md`](config_api.md) |
 | Select atoms/fragments in the live viewer and promote a selection to a group | [`selection_api.md`](selection_api.md) |

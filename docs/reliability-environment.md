@@ -73,11 +73,11 @@ Every install job uses the git commit in `pyproject.toml`:
 
 `2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6`
 
-That commit is the authorized pin. It includes
-Mercury `read_mryx` `0702ed8d` and lightweight CIF / phone-site
-`a4080132`. It is not MolCrysKit main. Do not retarget the pin to a
-later branch tip. Installing it before it is on MolCrysKit main is a
-readiness fact.
+That commit is the authorized pin. It includes Mercury `read_mryx`
+`0702ed8d`, lightweight CIF / phone-site `a4080132`, and the label
+bound that discards unselected structures. It is not MolCrysKit main
+and not tip `7b859dd`. Do not retarget the pin to that tip. Installing
+it before it is on MolCrysKit main is a readiness fact.
 
 The dependency requests the `desktop` extra. Core MolCrysKit is NumPy,
 NetworkX, and Click. The desktop extra supplies ASE, pymatgen, SciPy,

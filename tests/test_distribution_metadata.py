@@ -89,6 +89,19 @@ def test_release_jobs_reject_direct_references_and_non_final_tags() -> None:
     assert release.index("reject_direct_dependencies.py") < release.index(
         "gh release create"
     )
+    guard_install = "python -m pip install -c requirements/ci-constraints.txt packaging"
+    for job in (publish, release):
+        assert "actions/setup-python@v5" in job
+        assert guard_install in job
+        assert job.index("actions/setup-python@v5") < job.index(guard_install)
+        assert job.index(guard_install) < job.index("reject_direct_dependencies.py")
+    assert (
+        'python -m pip install -c requirements/ci-constraints.txt '
+        'build setuptools "setuptools-scm[toml]"'
+    ) in build
+    assert build.index("setuptools-scm[toml]") < build.index(
+        "reject_direct_dependencies.py"
+    )
 
 
 def _write_wheel(path: Path, metadata: str) -> None:

@@ -96,10 +96,15 @@ the requested projection; the saved camera remains unset and the browser
 keeps its live pose.
 
 A tab resync reads that scene's journal from the beginning. The newest row
-can be a camera envelope published after the geometry frame. The resync
-applies the newest figure for the scene first, then that later camera
-envelope. A camera envelope alone cannot paint a canvas that is still
-showing another scene.
+can be a camera envelope published after the geometry frame. A scene-scoped
+`GET /view-updates` puts that geometry body back in front of the camera
+envelope when the figure cache key still matches, even though
+`latest_figure_broadcast` leaves the body hidden so it is never painted
+alone. A silent refit has no camera envelope; the old body stays hidden and
+the response is `pending` until a new figure is built. The resync applies
+the figure first, then the later camera envelope. A camera envelope alone
+cannot paint a canvas that is still showing another scene, so the browser
+keeps reading the scene journal until a figure arrives.
 
 For local baseline measurements, `window.__mv_view_diag` reports submissions,
 full frames, local patches, camera updates, and stale drops.

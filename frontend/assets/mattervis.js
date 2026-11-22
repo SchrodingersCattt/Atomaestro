@@ -243,16 +243,20 @@
         });
         const payloads = sceneResyncPayloads(rows);
         const pending = !!(body && body.pending);
+        const hasFigure = payloads.some(function (item) {
+          return item && item.figure && item.figure.data;
+        });
         if (body && body.terminal) return;
-        if (!payloads.length || !window.MatterVisViewUpdates || typeof window.MatterVisViewUpdates.submit !== "function") {
-          // Keep retrying while a render is pending, but cap the total wait so
-          // a failed worker cannot leave an endless polling loop behind.
+        if (!hasFigure || !window.MatterVisViewUpdates || typeof window.MatterVisViewUpdates.submit !== "function") {
+          // A camera envelope cannot paint a canvas that still shows another
+          // scene. Keep asking until the geometry frame is in the journal,
+          // but cap the wait so a failed worker cannot poll forever.
           if (attempt < 40 || (pending && attempt < 120)) {
             setTimeout(function () { resyncScene(sceneId, attempt + 1); }, 250);
           } else if (pending && window.console && console.warn) {
             console.warn("MatterVis scene resync timed out", sceneId);
           }
-          return;
+          if (!payloads.length || !window.MatterVisViewUpdates || typeof window.MatterVisViewUpdates.submit !== "function") return;
         }
         // Feed resync frames through the same scene/sequence fence as the
         // live transport.  A rapid tab switch can make the selected scene
@@ -668,8 +672,12 @@
       if (targetExpected.render_revision !== null && targetExpected.render_revision !== undefined &&
           (!replacingScene || hasGeneration) &&
           (!Number.isFinite(revision) || revision < Number(targetExpected.render_revision))) return false;
-      if (targetExpected.camera_revision !== null && targetExpected.camera_revision !== undefined &&
-          (!replacingScene || hasGeneration) &&
+      /* Replacing the canvas may reuse a geometry body whose baked camera
+       * revision is behind the confirmed pose. The camera envelope that
+       * follows paints that pose. Rejecting the body here leaves the
+       * previous molecule on screen. */
+      if (!replacingScene &&
+          targetExpected.camera_revision !== null && targetExpected.camera_revision !== undefined &&
           Number(render.camera_revision||0) < Number(targetExpected.camera_revision)) return false;
     }
     if (!replacingScene) {
@@ -3044,10 +3052,13 @@
       // per-scene cursor to decide whether this payload is a duplicate.
       const payloadScene = p.scene_id ? String(p.scene_id) : "";
       const sceneSeq = Number(payloadScene && latestFigureSeqByScene[payloadScene] || 0);
-      /* Only the equal high-water frame can be replayed for a handoff; older
-       * sequence numbers remain stale even while another scene is displayed. */
-      if (seq && (seq < sceneSeq || (seq === sceneSeq && !sceneFrameNeedsReplay(payloadScene)))) return;
-      if (seq) {
+      const carriesFigure = !!(p.figure && p.figure.data);
+      /* A camera envelope shares the journal counter but it is not a frame.
+       * Letting it advance the per-scene cursor hides the earlier geometry
+       * figure when the user returns to that tab. Camera staleness is
+       * decided by the view submitter. */
+      if (carriesFigure && seq && (seq < sceneSeq || (seq === sceneSeq && !sceneFrameNeedsReplay(payloadScene)))) return;
+      if (carriesFigure && seq) {
         if (payloadScene) latestFigureSeqByScene[payloadScene] = Math.max(sceneSeq, seq);
         window.__mattervisFigureLastSeq = Math.max(Number(window.__mattervisFigureLastSeq || 0), seq);
       }

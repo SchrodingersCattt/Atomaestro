@@ -767,6 +767,21 @@ const envelope = (camera, revision) => ({
   assert.equal(await submit(envelope(orbit, 2)), 'camera');
   assert.equal(applied.length, 1, 'a later camera revision was not applied');
   assert.equal(applied[0].eye.x, 0.34);
+  sandbox.window.__mvServerCameraByScene.ionic.server_started_at = 'epoch-old';
+  const restarted = envelope(reset, 1);
+  restarted.server_started_at = 'epoch-new';
+  applied.length = 0;
+  sandbox.window.MatterVisViewUpdates.reset();
+  assert.equal(await submit(restarted), 'camera');
+  assert.equal(applied.length, 1, 'a restarted server session reused the previous scene book');
+  assert.equal(applied[0].eye.x, 1.04);
+  sandbox.window.__mvServerCameraByScene = {ionic: {camera: orbit, camera_revision: 1, scene_generation: 5}};
+  const refilled = envelope(reset, 1);
+  refilled.server_started_at = 'epoch-newer';
+  applied.length = 0;
+  sandbox.window.MatterVisViewUpdates.reset();
+  assert.equal(await submit(refilled), 'camera');
+  assert.equal(applied.length, 1, 'a book with no server epoch survived the restart');
 })().catch((error) => { console.error(error); process.exitCode = 1; });
 """
     result = subprocess.run(

@@ -97,7 +97,13 @@ must not change scene B, and a stale revision must not replace a newer one.
   an older camera only for the scene currently on the canvas. A replayed
   camera envelope at that same revision is not applied when the store
   already holds a different pose: the envelope is the command from
-  before the drag, and writing it back would replace the orbit. The orbit controller stores distance as a log
+  before the drag, and writing it back would replace the orbit. The
+  store records `server_started_at` with that pose. A new server
+  session drops a book entry from the previous session, including one
+  that has no session stamp. The restore after a complete frame follows
+  the same book. `__mvLatestCamera` stays the last camera command, and
+  a drag does not replace it. A programmatic camera relayout is not
+  stored while a wheel gesture is open. The orbit controller stores distance as a log
   radius and rebuilds `camera.eye` on the next matrix recalc, so the
   acknowledged pose is written with `lookAt` and recalculated after the
   relayout. A wheel zoom does the same after its eye relayout, on the

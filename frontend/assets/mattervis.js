@@ -962,6 +962,40 @@
       const rightProjection = right.projection && (right.projection.type || right.projection);
       return !leftProjection || !rightProjection || String(leftProjection) === String(rightProjection);
     }
+    function posePartDiffers(left, right) {
+      function num(value, index, name) {
+        if (!value) return NaN;
+        if (Array.isArray(value)) return Number(value[index]);
+        if (value[name] !== undefined && value[name] !== null) return Number(value[name]);
+        return Number(value[index]);
+      }
+      const axes = ["x", "y", "z"];
+      return axes.some(function (name, index) {
+        const a = num(left, index, name);
+        const b = num(right, index, name);
+        return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) > 1e-6;
+      });
+    }
+    function rememberedPoseOwnsClock(render, gd, snapshot) {
+      const book = window.__mvServerCameraByScene;
+      const sceneId = render && render.scene_id ? String(render.scene_id) : "";
+      const saved = book && sceneId ? book[sceneId] : null;
+      if (!saved || !saved.camera || !snapshot) return false;
+      const revision = Number(gd && gd.__mvCameraRevision);
+      if (!Number.isFinite(revision) || Number(saved.camera_revision) !== revision) return false;
+      if (saved.scene_generation !== undefined && saved.scene_generation !== null &&
+          render && render.scene_generation !== undefined && render.scene_generation !== null &&
+          String(saved.scene_generation) !== String(render.scene_generation)) return false;
+      const clockEpoch = gd && gd.__mvCameraRevisionEpoch != null && gd.__mvCameraRevisionEpoch !== ""
+        ? String(gd.__mvCameraRevisionEpoch) : "";
+      const savedEpoch = saved.server_started_at != null && saved.server_started_at !== ""
+        ? String(saved.server_started_at) : "";
+      if (clockEpoch && savedEpoch && clockEpoch !== savedEpoch) return false;
+      if (clockEpoch && !savedEpoch) return false;
+      return posePartDiffers(saved.camera.eye, snapshot.eye) ||
+        posePartDiffers(saved.camera.center, snapshot.center) ||
+        posePartDiffers(saved.camera.up, snapshot.up);
+    }
     /* A wheel can leave the orbit radius at the previous distance after
      * the server has the new eye. A same-revision frame would otherwise
      * copy that stale gl eye over the layout and paint it again. */
@@ -1288,9 +1322,12 @@
       if (Number.isFinite(ackRevision) && ackRevision < Number(still.camera_revision || 0)) return Promise.resolve();
       graph.__mvApplyingServerCamera = true;
       graph.__mvOwnedRelayoutDepth = Number(graph.__mvOwnedRelayoutDepth || 0) + 1;
+      window.__mvProgrammaticCameraDepth = Number(window.__mvProgrammaticCameraDepth || 0) + 1;
+      if (eye) window.__mvProgrammaticCameraStamp = {eye: eye, at: Date.now()};
       const clear = function () {
         graph.__mvApplyingServerCamera = false;
         graph.__mvOwnedRelayoutDepth = Math.max(0, Number(graph.__mvOwnedRelayoutDepth || 1) - 1);
+        window.__mvProgrammaticCameraDepth = Math.max(0, Number(window.__mvProgrammaticCameraDepth || 1) - 1);
       };
       let pending = null;
       try { pending = runAsQueueOwner(graph, function () { return window.Plotly.relayout(graph, patch); }); }
@@ -1618,11 +1655,18 @@
              * server already owns that pose and applies it after the traces. */
             const releaseCapture = suppressCameraCapture(gd);
             /* Relayouts Plotly makes while this figure is rendering belong
-             * to the figure. A camera relayout outside it is a newer pose. */
+             * to the figure. A camera relayout outside it is a newer pose.
+             * The depth drops when this call returns. The stamp stays so a
+             * Dash relayoutData delivered afterwards is still this frame,
+             * including one that arrives during a wheel. */
             gd.__mvFrameReactStartedAt = Date.now();
             gd.__mvInsideFrameReact = Number(gd.__mvInsideFrameReact || 0) + 1;
+            window.__mvProgrammaticCameraDepth = Number(window.__mvProgrammaticCameraDepth || 0) + 1;
+            const plottedEye = plotted && plotted.scene && plotted.scene.camera && plotted.scene.camera.eye;
+            if (plottedEye) window.__mvProgrammaticCameraStamp = {eye: plottedEye, at: Date.now()};
             const releaseFrameReact = function () {
               gd.__mvInsideFrameReact = Math.max(0, Number(gd.__mvInsideFrameReact || 1) - 1);
+              window.__mvProgrammaticCameraDepth = Math.max(0, Number(window.__mvProgrammaticCameraDepth || 1) - 1);
             };
             let pending;
             try {
@@ -1862,6 +1906,13 @@
             const camera = window.MatterVisViewCamera;
             if (!frameApplied || !frameCameraIsStale(render, gd) || !latest || !camera ||
                 typeof camera.applyAsync !== "function") return result;
+            /* __mvLatestCamera is the last applyAsync snapshot. A drag does
+             * not write it, so it can still be the command from before that
+             * drag. The geometry body is behind the graph clock, and this
+             * hook would paint that command over the pose applyServerCamera
+             * just restored. The book owns that revision. A command newer
+             * than the book still applies. */
+            if (rememberedPoseOwnsClock(render, gd, latest.snapshot)) return result;
             const fittedNow = window.__mvFittedFrames && window.__mvFittedFrames[String(render.scene_id)];
             return camera.applyAsync(latest.snapshot, {
               scene_id: render.scene_id,
@@ -3843,6 +3894,7 @@
     window.__mvGestureEndedAt = 0;
     window.__mvGesturePointerRelayoutSeen = false;
     window.__mvCaptureCommitSeen = false;
+    window.__mvProgrammaticCameraStamp = null;
     const sceneId = canvasSceneId() || window.__mvGestureSceneId || "";
     stampGestureScene(sceneId, "pointer");
     markActive();

@@ -123,10 +123,20 @@ already holds a different eye, center, or up for that scene and
 generation. That stored pose is the drag. The envelope is the command
 published before the drag, and applying it would write the command's
 eye back onto the server. A later command still applies because it
-advances `camera_revision`. The geometry frame's camera relayout is
-not a drag. Capture stores a camera relayout only for a live pointer,
-the one pointer-up commit, or a wheel. A later relayout on the same
-canvas keeps the orbit the server already accepted.
+advances `camera_revision`. The book entry carries
+`server_started_at`. A restarted session reuses the scene id,
+generation, and revision, and that older book does not hide the new
+session's command. The post-react restore uses the same rule. It
+reapplies `__mvLatestCamera` only when that snapshot is still the
+acknowledged pose. A drag does not write `__mvLatestCamera`, so the
+command from before the drag must not replace the orbit the book just
+painted. A command newer than the book still applies. The geometry
+frame's camera relayout is not a drag. Capture stores a camera
+relayout only for a live pointer, the one pointer-up commit, or a
+wheel whose eye is not the geometry frame or the server pose restore.
+A wheel that is already in progress does not adopt that programmatic
+eye. A later relayout on the same canvas keeps the orbit the server
+already accepted.
 
 For local baseline measurements, `window.__mv_view_diag` reports submissions,
 full frames, local patches, camera updates, and stale drops.

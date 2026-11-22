@@ -43,6 +43,31 @@ def register_camera_clientside(app) -> None:
           }
           if (!touches) return window.dash_clientside.no_update;
           var gd = document.querySelector("#crystal-graph .js-plotly-plot");
+          if (Number(window.__mvProgrammaticCameraDepth || 0) > 0) return window.dash_clientside.no_update;
+          if (gd && (Number(gd.__mvInsideFrameReact || 0) > 0 || gd.__mvApplyingServerCamera ||
+              gd.__mvRestoringDrag || Number(gd.__mvOwnedRelayoutDepth || 0) > 0)) {
+            return window.dash_clientside.no_update;
+          }
+          var stamp = window.__mvProgrammaticCameraStamp;
+          var stampedEye = stamp && stamp.eye;
+          var relayoutEye = relayout["scene.camera.eye"] ||
+            (relayout["scene.camera"] && relayout["scene.camera"].eye) ||
+            (relayout.scene && relayout.scene.camera && relayout.scene.camera.eye);
+          function eyeNear(left, right) {
+            if (!left || !right) return false;
+            var names = ["x", "y", "z"];
+            for (var n = 0; n < names.length; n++) {
+              var a = Number(left[names[n]] !== undefined ? left[names[n]] : left[n]);
+              var b = Number(right[names[n]] !== undefined ? right[names[n]] : right[n]);
+              if (!Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a - b) > 1e-4) return false;
+            }
+            return true;
+          }
+          var wheelPose = window.__mvUnadoptedWheel && window.__mvUnadoptedWheel.camera;
+          if (stampedEye && relayoutEye && eyeNear(relayoutEye, stampedEye) &&
+              !(wheelPose && eyeNear(relayoutEye, wheelPose.eye))) {
+            return window.dash_clientside.no_update;
+          }
           var meta = gd && gd.layout && gd.layout.meta && gd.layout.meta.mattervis_render;
           var canvasId = meta && meta.scene_id ? String(meta.scene_id) : "";
           var gestureId = window.__mvGestureSceneId ? String(window.__mvGestureSceneId) : "";
@@ -108,7 +133,10 @@ def register_camera_clientside(app) -> None:
               : Number(revision),
             scene_generation: data.scene_generation !== undefined && data.scene_generation !== null
               ? data.scene_generation
-              : (previous ? previous.scene_generation : null)
+              : (previous ? previous.scene_generation : null),
+            server_started_at: data.server_started_at !== undefined && data.server_started_at !== null
+              ? data.server_started_at
+              : (previous ? previous.server_started_at : null)
           };
           if (typeof window.__mvApplyServerCamera === "function") {
             window.__mvApplyServerCamera(id);

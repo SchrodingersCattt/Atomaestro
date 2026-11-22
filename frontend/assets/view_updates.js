@@ -31,6 +31,13 @@
       latestCameraRevision = Object.create(null);
       latestVersions = Object.create(null);
       parkedCameraByScene = Object.create(null);
+      var book = root.__mvServerCameraByScene;
+      if (book) {
+        Object.keys(book).forEach(function (id) {
+          var entry = book[id];
+          if (!entry || !entry.server_started_at || String(entry.server_started_at) !== epoch) delete book[id];
+        });
+      }
       root.__mv_view_diag.epochResets = (root.__mv_view_diag.epochResets || 0) + 1;
     }
     root.__mvServerEpoch = epoch;
@@ -134,6 +141,11 @@
     var saved = book && sceneId ? book[sceneId] : null;
     if (!saved || !saved.camera) return false;
     if (Number(saved.camera_revision) !== Number(revision)) return false;
+    var savedEpoch = saved.server_started_at;
+    var incomingEpoch = snapshot.server_started_at;
+    if (present(savedEpoch) && present(incomingEpoch) && String(savedEpoch) !== String(incomingEpoch)) return false;
+    if (present(root.__mvServerEpoch) && root.__mv_view_diag.epochResets &&
+        (!present(savedEpoch) || String(savedEpoch) !== String(root.__mvServerEpoch))) return false;
     var generation = generationOf(snapshot, graph());
     if (present(saved.scene_generation) && present(generation) &&
         String(saved.scene_generation) !== String(generation)) return false;

@@ -33,7 +33,7 @@ const window = {
   __mvCaptureCommitSeen: true,
 };
 const document = {querySelector: () => ({layout: {meta: {mattervis_render: {scene_id: 'ionic'}}}})};
-const sandbox = {window, document, Date, Number, String, Object};
+const sandbox = {window, document, Date, Number, String, Object, Math};
 vm.createContext(sandbox);
 const capture = vm.runInContext('(' + fn + ')', sandbox);
 assert.equal(capture(relayout), 'NO', 'a settled frame relayout was stored as the drag');
@@ -47,6 +47,19 @@ window.__mvCaptureCommitSeen = false;
 const commit = capture(relayout);
 assert.equal(commit.scene_id, 'ionic', 'the pointer-up commit was dropped');
 assert.equal(capture(relayout), 'NO', 'a second relayout in the commit window was stored');
+window.__mvGestureKind = 'wheel';
+window.__mvGestureEndedAt = 0;
+window.__mvGestureSceneId = 'ionic';
+window.__mvProgrammaticCameraDepth = 1;
+assert.equal(capture(relayout), 'NO', 'a geometry relayout during a wheel was stored');
+window.__mvProgrammaticCameraDepth = 0;
+window.__mvProgrammaticCameraStamp = {eye: {x: 1, y: 1, z: 1}};
+window.__mvUnadoptedWheel = {camera: {eye: {x: 0.4, y: 1.7, z: 0.3}}};
+assert.equal(capture(relayout), 'NO', 'a stamped frame camera was stored as the wheel');
+const zoom = {'scene.camera.eye': {x: 0.4, y: 1.7, z: 0.3}, 'scene.camera.center': {x: 0, y: 0, z: 0}, 'scene.camera.up': {x: 0, y: 0, z: 1}};
+const stored = capture(zoom);
+assert.equal(stored.scene_id, 'ionic', 'the wheel pose was dropped with the frame camera');
+assert.equal(stored.relayout['scene.camera.eye'].x, 0.4);
 """
     result = subprocess.run(
         [node, "-e", program, str(source)],

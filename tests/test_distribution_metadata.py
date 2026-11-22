@@ -151,8 +151,9 @@ def test_upload_guard_rejects_built_wheel_and_accepts_legal_metadata(
     captured = capsys.readouterr()
     assert blocked == 1
     assert MOLCRYSKIT_DEVELOPMENT_REQUIREMENT in captured.err
-    assert "direct reference" in captured.err
-    assert "lists no Requires-Dist" in captured.err
+    assert "METADATA uses a direct reference" in captured.err
+    sdist = next(path for path in artifacts if path.name.endswith(".tar.gz"))
+    assert sdist.name in captured.err
 
     legal = tmp_path / "legal.whl"
     _write_wheel(

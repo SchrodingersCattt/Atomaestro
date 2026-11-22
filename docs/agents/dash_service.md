@@ -209,7 +209,10 @@ Notes for callers:
   the plot, paints that accepted camera. An inside-plot release
   commits on canvas mouseup before that paint. A newer gesture or a
   different mounted scene drops it, and the paint keeps a frame that
-  started during the drag from restoring the sampled eye. A drag whose revision lost
+  started during the drag from restoring the sampled eye. That
+  restore is a dotted relayout and is not stored, so it cannot
+  replace the refit. The pointer's own mouseup still sends the whole
+  `scene.camera`. A drag whose revision lost
   to Reset or a refit is not stored, and the capture response carries
   the camera that won so the canvas paints it. A transient camera revision is read back only for that same generation and
   epoch. A width/height replot during an in-progress drag restores the live

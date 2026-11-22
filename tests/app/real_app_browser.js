@@ -1653,7 +1653,7 @@ async function runOrthoPan(page) {
   } catch (error) {
     const settled = await cameraProbe(page);
     const settledInk = await canvasInk(page);
-    fail(`manual orthographic pan stayed offscreen ${JSON.stringify({title, beforeInk, settledInk, settled, error: error.message})}`);
+    fail(`manual orthographic pan did not return to the framing camera ${JSON.stringify({title, beforeInk, settledInk, settled, error: error.message})}`);
   }
   const settled = await cameraProbe(page);
   if (Number(settled.maxCenter || 0) <= 1) {
@@ -1663,6 +1663,35 @@ async function runOrthoPan(page) {
   const recovered = await readView(page);
   if (recoveredInk < CANVAS_INK_FLOOR || !recovered.ortho || recovered.sceneId !== before.sceneId) {
     fail(`refit left the panned canvas blank ${JSON.stringify({recovered, recoveredInk})}`);
+  }
+  // A short inside pan after that refit must stay. The previous pan's
+  // sample is not a new pose, and this release is.
+  const recoveredCenter = recovered.center || {x: 0, y: 0, z: 0};
+  await page.evaluate(() => { window.__mvUncommittedPaintCount = 0; window.__mvPanRelayouts = []; });
+  const afterY = box.y + box.height * 0.55;
+  const afterX = box.x + box.width * 0.4;
+  await page.mouse.move(afterX, afterY);
+  await page.mouse.down({button: "right"});
+  await page.mouse.move(afterX + 160, afterY, {steps: 10});
+  await page.mouse.up({button: "right"});
+  await page.waitForTimeout(200);
+  const after = await cameraProbe(page);
+  const afterCenter = after.live && after.live.center;
+  const afterCommit = (after.relayouts || []).reduce((found, item) => {
+    return item && item.keys && item.keys.indexOf("scene.camera") >= 0 && item.center ? item.center : found;
+  }, null);
+  const afterMoved = afterCenter && Math.hypot(
+    Number(afterCenter.x) - Number(recoveredCenter.x || 0),
+    Number(afterCenter.y) - Number(recoveredCenter.y || 0),
+    Number(afterCenter.z) - Number(recoveredCenter.z || 0),
+  ) > 0.05;
+  const afterKept = afterCenter && afterCommit && Math.hypot(
+    Number(afterCenter.x) - Number(afterCommit.x),
+    Number(afterCenter.y) - Number(afterCommit.y),
+    Number(afterCenter.z) - Number(afterCommit.z),
+  ) < 0.05;
+  if (!afterMoved || !afterKept) {
+    fail(`inside pan after the refit did not stay ${JSON.stringify({after, recoveredCenter})}`);
   }
 }
 

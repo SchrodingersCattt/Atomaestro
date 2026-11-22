@@ -703,6 +703,17 @@
     return render && render.scene_id ? String(render.scene_id) : "";
   }
   function frameCameraIsStale(render, gd) {
+    if (!render || !gd) return false;
+    const shown = renderMetadataFromLayout(gd.layout);
+    const shownScene = shown && shown.scene_id ? String(shown.scene_id) : "";
+    const incomingScene = render.scene_id ? String(render.scene_id) : "";
+    /* The graph clock is the pose from the last visit to this scene. A
+     * complete frame that replaces another scene is the geometry for that
+     * pose. Rejecting it because the baked camera revision is older leaves
+     * the previous structure on the canvas. The acknowledged camera is
+     * applied after these traces. The same comparison still drops an older
+     * camera over a fit that is already painted for this scene. */
+    if (incomingScene && shownScene && incomingScene !== shownScene) return false;
     const epoch = gd && gd.__mvCameraRevisionEpoch;
     const sameEpoch = !epoch || !render.server_started_at || String(epoch) === String(render.server_started_at);
     const scope = String(render.scene_id || "") + ":" +
@@ -1601,10 +1612,11 @@
             const plotted = projectionSplit ? layoutWithProjection(next, projectionSplit.liveType) : next;
             if (objectFigure) args[1]=Object.assign({},args[1],{layout:plotted});
             else args[2]=plotted;
-            /* Hold camera relayouts inside this task so the intermediate
-             * geometry frame cannot be stored as the new scene's camera.
-             * The server already owns the camera in the incoming figure. */
-            const releaseCapture = projectionSplit ? suppressCameraCapture(gd) : null;
+            /* Hold camera relayouts inside this task so the geometry frame
+             * cannot be stored as the scene pose. A tab return reuses a body
+             * whose baked camera is older than the acknowledged orbit. The
+             * server already owns that pose and applies it after the traces. */
+            const releaseCapture = suppressCameraCapture(gd);
             /* Relayouts Plotly makes while this figure is rendering belong
              * to the figure. A camera relayout outside it is a newer pose. */
             gd.__mvFrameReactStartedAt = Date.now();
@@ -3830,6 +3842,7 @@
     if (window.__mvRetireDragSample) window.__mvRetireDragSample();
     window.__mvGestureEndedAt = 0;
     window.__mvGesturePointerRelayoutSeen = false;
+    window.__mvCaptureCommitSeen = false;
     const sceneId = canvasSceneId() || window.__mvGestureSceneId || "";
     stampGestureScene(sceneId, "pointer");
     markActive();

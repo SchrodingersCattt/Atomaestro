@@ -91,7 +91,13 @@ must not change scene B, and a stale revision must not replace a newer one.
   the `#ack` suffix of `scene.uirevision` with the pose. Plotly keeps the
   previous WebGL camera while the published token is unchanged, and a
   drag does not advance `camera_revision`, so the token has to change
-  with the eye and center. The orbit controller stores distance as a log
+  with the eye and center. The geometry body is painted first even when
+  its camera revision is behind that stored pose and the graph still
+  remembers the pose from the previous visit. The remembered clock rejects
+  an older camera only for the scene currently on the canvas. A replayed
+  camera envelope at that same revision is not applied when the store
+  already holds a different pose: the envelope is the command from
+  before the drag, and writing it back would replace the orbit. The orbit controller stores distance as a log
   radius and rebuilds `camera.eye` on the next matrix recalc, so the
   acknowledged pose is written with `lookAt` and recalculated after the
   relayout. A wheel zoom does the same after its eye relayout, on the

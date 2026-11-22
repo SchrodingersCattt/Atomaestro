@@ -18,8 +18,10 @@ Usage::
     mat-vis serve --cif structure.cif --port 50001
 
 The module itself imports only the standard library and the lightweight
-capability registry.  Renderer, Plotly, Web, Cube, animation, and Textual code
-is loaded only after its corresponding command is selected.
+capability registry.  Parser construction follows the selected command.
+Top-level help registers command summaries and does not import the renderer.
+Renderer, Plotly, Web, Cube, animation, and Textual code is loaded only after
+its corresponding command is selected, including that command's ``--help``.
 """
 
 from __future__ import annotations
@@ -38,7 +40,12 @@ from .capabilities import (
     requirements_for_tui,
     resolve_requirements,
 )
-from .cli_lazy import bind_deferred_cli_symbols
+from .cli_lazy import (
+    add_atom_property_arguments as _add_atom_property_arguments,
+    add_bond_policy_arguments,
+    add_session_arguments,
+    bind_deferred_cli_symbols,
+)
 
 bind_deferred_cli_symbols(globals())
 
@@ -257,9 +264,8 @@ def _build_tui_parser(
         default=False,
         help="Force monochrome output (no ANSI color codes).",
     )
-    from .tui.cli import add_session_arguments
-
-    add_session_arguments(p) or add_bond_policy_arguments(p)
+    add_session_arguments(p)
+    add_bond_policy_arguments(p)
     p.add_argument(
         "--format",
         choices=_TUI_FORMATS,
@@ -990,6 +996,48 @@ def _agent_render_main(args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 
 
+_COMMAND_HELP = (
+    ("render", "Render an atomistic structure or trajectory."),
+    ("inspect", "Inspect a structure without rendering it."),
+    (
+        "capabilities",
+        "Report installed rendering capabilities and exact install hints.",
+    ),
+    ("skills", "Discover and read bundled Agent Skills."),
+    ("serve", "Launch the interactive Dash browser viewer."),
+    ("tui", "Terminal-based crystal structure viewer."),
+    ("operate", "Commit a structural operation."),
+)
+
+
+def _build_operate_parser(subparsers: argparse._SubParsersAction) -> None:
+    from .effects.cli import build_operate_parser
+
+    build_operate_parser(subparsers)
+
+
+def _command_token(argv: list[str]) -> str | None:
+    """Return the selected subcommand, or None for root help and root errors.
+
+    ``-h``/``--help`` before a command name prints the root summary.  That
+    summary lists every command without building the heavy parsers.  ``--``
+    is left for argparse: the root parser reports it as an invalid command,
+    matching the parser that registers every subcommand up front.
+    """
+    for token in argv:
+        if token in {"-h", "--help"}:
+            return None
+        if token.startswith("-") and token != "--":
+            continue
+        return token
+    return None
+
+
+def _register_command_summaries(subparsers: argparse._SubParsersAction) -> None:
+    for name, help_text in _COMMAND_HELP:
+        subparsers.add_parser(name, help=help_text)
+
+
 def main(argv: Optional[list[str]] = None) -> None:
     """MatterVis CLI entry point."""
     raw = list(sys.argv[1:] if argv is None else argv)
@@ -1003,19 +1051,20 @@ def main(argv: Optional[list[str]] = None) -> None:
         description="MatterVis: publication-quality crystal structure visualization.",
     )
     subparsers = parser.add_subparsers(dest="command")
-
-    _build_render_parser(subparsers)
-    _build_inspect_parser(subparsers)
-    _build_capabilities_parser(subparsers)
-    subparsers.add_parser(
-        "skills",
-        help="Discover and read bundled Agent Skills.",
-    )
-    _build_serve_parser(subparsers)
-    _build_tui_parser(subparsers)
-    from .effects.cli import build_operate_parser
-
-    build_operate_parser(subparsers)
+    builders = {
+        "render": _build_render_parser,
+        "inspect": _build_inspect_parser,
+        "capabilities": _build_capabilities_parser,
+        "serve": _build_serve_parser,
+        "tui": _build_tui_parser,
+        "operate": _build_operate_parser,
+    }
+    command = _command_token(raw)
+    builder = builders.get(command) if command is not None else None
+    if builder is None:
+        _register_command_summaries(subparsers)
+    else:
+        builder(subparsers)
 
     args = parser.parse_args(argv)
 

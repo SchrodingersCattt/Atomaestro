@@ -5,7 +5,8 @@ browser viewer. Every input format is parsed into the same canonical structure
 frame before scene construction. The command remains `mat-vis`. The
 published 0.0.6 release is `matter-vis`. Optional extras in this checkout
 use the unpublished `atomaestro` distribution. There is no second command.
-See [the migration guide](rebranding.md).
+An existing `matter-vis` install is moved by uninstalling it, or by using a
+new environment, and then installing `atomaestro`. See [the migration guide](rebranding.md).
 
 ## Quick start
 

@@ -15,7 +15,8 @@ python -m pip install "molcrys-kit==0.8.0" "matter-vis==0.0.6"
 The matrix below is the resolver output for this checkout's `atomaestro`
 distribution. Those commands are future installs. Do not run them until
 `atomaestro` is actually on PyPI. Do not install `matter-vis` and
-`atomaestro` into the same environment.
+`atomaestro` into the same environment. Uninstall `matter-vis` first, or
+use a new environment.
 
 ## Resolve on demand
 

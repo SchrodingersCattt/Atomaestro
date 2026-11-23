@@ -66,37 +66,19 @@ GitHub redirects the old repository path as long as that path is not reused. The
 
 Do not also build a full `matter-vis` wheel from this tree. Pip would then have two projects recording the same `mat_viewer` files and the same `mat-vis` script. Installing both into one environment overwrites those files and leaves two owners.
 
-The local forwarder is `.github/scripts/build_matter_vis_forwarder.py`. It reads one built `atomaestro` wheel and writes an empty `matter-vis` wheel and sdist of that same final version. The base requirement is `atomaestro==<version>`. Each extra on the source wheel becomes `atomaestro[<extra>]==<version>`. The forwarder has no packages, no modules, and no console scripts, so it does not own `mat_viewer` or `mat-vis`.
+Do not publish an empty `matter-vis` wheel that depends on `atomaestro`. Pip installs dependencies before it removes the old distribution. The old `matter-vis` record lists the installed `mat_viewer` files, and pip also removes the `mat-vis` console script from that distribution's entry points. Those paths are deleted after `atomaestro` has written them. No package metadata or constraint changes that order. Naming `matter-vis` before `atomaestro` on one `pip install --no-deps` command avoids the deletion only because `--no-deps` stops the resolver from installing the dependency first. That command is not a supported upgrade, and it skips the MolCrysKit requirement.
 
-Build it outside `dist/`. The release job uploads every file under `dist/` and the metadata check requires the project name `atomaestro`, so a forwarder placed there fails the check:
+`.github/scripts/build_matter_vis_forwarder.py` refuses to write the wheel. The release check rejects an artifact whose name is `matter-vis`, including when `--project matter-vis` is passed. [Archiving](https://docs.pypi.org/project-management/archiving-projects/) the existing project is a separate decision. Do not delete `matter-vis`.
 
-```bash
-python -m build --no-isolation --outdir /tmp/atomaestro-dist
-python .github/scripts/build_matter_vis_forwarder.py \
-  /tmp/atomaestro-dist/atomaestro-*.whl \
-  --outdir /tmp/matter-vis-forwarder
-```
-
-The script refuses a version that is not a final `X.Y.Z` release. No release version is chosen here. The command above is a local build. It does not upload.
-
-Transition after the account owner has published `atomaestro`:
-
-1. Keep using `atomaestro` for new installs.
-2. Publish a later empty release of the existing `matter-vis` project from that forwarder, at the same version as the published `atomaestro`. Upload it with the existing `matter-vis` project, not the `atomaestro` publisher.
-3. Leave `matter-vis` able to accept that upload. [Archiving](https://docs.pypi.org/project-management/archiving-projects/) blocks new uploads, so archive only after the forwarder policy is finished. Do not delete the project.
-
-Until that upload exists, `pip install -U matter-vis` on PyPI stays on 0.0.6. It does not upgrade to `atomaestro`. Put `atomaestro` in a fresh environment, or uninstall `matter-vis` before installing it.
-
-After both wheels exist locally, pip still deletes overlapping paths when `atomaestro` is installed before the old `matter-vis` record is removed. The old record is what pip deletes. On this fixture those paths are `mat_viewer/__init__.py` and `mat-vis`. The console script is then gone. `import mat_viewer` loads a namespace package and the `capabilities` function from `__init__.py` is absent. Files the predecessor did not record, such as `mat_viewer/cli.py`, stay on disk and can still be imported. Both distributions still show as installed. The same deletion is what a dependency-first `pip install --upgrade matter-vis` does, and that command also follows the MolCrysKit git pin. Checked through pip 26.3. This fixture is not the public 0.0.6 file list, and the test does not download that release.
-
-The local order that keeps the files names `matter-vis` before `atomaestro` and uses `--no-deps`, so pip does not reorder the packages or fetch the git pin:
+Until `atomaestro` is on PyPI, `pip install -U matter-vis` stays on 0.0.6. After it is published, install it in a new environment, or uninstall the old distribution first:
 
 ```bash
-python -m pip install --upgrade --no-index --find-links /tmp/wheelhouse \
-  --no-deps matter-vis atomaestro
+python -m pip uninstall -y matter-vis
+python -m pip install atomaestro
+mat-vis --help
 ```
 
-The test installs the synthetic predecessor, runs its `mat-vis`, then runs `mat-vis capabilities --json` and imports `mat_viewer` from the virtual environment. It reads the installed `mat_viewer/__init__.py` again and compares those bytes with the `atomaestro` wheel. Uninstalling the forwarder leaves the command and the import in place. Uninstalling `atomaestro` while the forwarder remains removes the command and the modules. None of this is a public upgrade.
+The repository test uses a synthetic predecessor. Its `mat_viewer` paths are the 320 paths in the public 0.0.6 wheel record, and the bytes are not that wheel. It does not download 0.0.6. Uninstalling that predecessor and then installing the local `atomaestro` wheel leaves a working `mat-vis` and a `mat_viewer` tree whose bytes match the new wheel. A new environment with only that wheel does the same. Installing `atomaestro` and then upgrading `matter-vis` deletes the recorded paths and the command. Uninstalling both and installing `atomaestro` again restores them. A second test installs pip 24.0 and pip 26.3 and sees the same deletion and the same restore. It does not cover the releases between those two versions.
 
 ## Release workflow and trusted publisher
 
@@ -139,20 +121,20 @@ Checked again on 2026-11-23, the newest PyPI release and the newest final GitHub
 
 There is no released version, and therefore no normal `molcrys-kit>=X,<Y` range, that can replace the pin. Do not fall back to 0.8.0.
 
-`.github/scripts/reject_direct_dependencies.py` fails the release workflow when a built wheel or sdist contains a direct reference, when the canonical metadata lists no `Requires-Dist` at all, when the tag is not `vX.Y.Z`, and when `--project atomaestro` does not match the artifact name. The release commands pass that project name. The wheel built with the pinned toolchain carries the git URL above in `METADATA`. The matching sdist records that same URL in `PKG-INFO` and in `requires.txt`. All three fail the check. The release build job runs it before uploading artifacts. That job already installs `build`, `setuptools`, and `setuptools-scm` under `requirements/ci-constraints.txt`, which pins `packaging==26.3`, before the script. The PyPI job and the GitHub Release job install that same pinned `packaging` before they run the script again, then publish. A tag push of this tree fails that check. That is the release block. Pull-request CI feeds the wheel and sdist it just built to the same script and expects rejection, so the blocked release does not fail the pull request. The test also builds those artifacts and accepts a wheel whose `Requires-Dist` is a normal version requirement.
+`.github/scripts/reject_direct_dependencies.py` fails the release workflow when a built wheel or sdist contains a direct reference, when the canonical metadata lists no `Requires-Dist` at all, when the tag is not `vX.Y.Z`, when the artifact name is `matter-vis`, and when `--project atomaestro` does not match the artifact name. The release commands pass that project name. The wheel built with the pinned toolchain carries the git URL above in `METADATA`. The matching sdist records that same URL in `PKG-INFO` and in `requires.txt`. All three fail the check. The release build job runs it before uploading artifacts. That job already installs `build`, `setuptools`, and `setuptools-scm` under `requirements/ci-constraints.txt`, which pins `packaging==26.3`, before the script. The PyPI job and the GitHub Release job install that same pinned `packaging` before they run the script again, then publish. A tag push of this tree fails that check. That is the release block. Pull-request CI feeds the wheel and sdist it just built to the same script and expects rejection, so the blocked release does not fail the pull request. The test also builds those artifacts and accepts a wheel whose `Requires-Dist` is a normal version requirement.
 
 Replacing the pin requires a MolCrysKit release that the user confirms by version. This pull request does not create that release. The confirmed release has to include the contract above and install on Windows as a normal PyPI requirement, because Atomaestro's Windows job and a public install cannot keep a git URL. Until that release exists, do not publish `atomaestro`.
 
 ## Version
 
-The published Atomaestro predecessor is `matter-vis` 0.0.6. No next version is approved. `0.1.0` remains the proposal for the first `atomaestro` release because PyPI treats that name as a new project, not as a patch of `matter-vis` 0.0.6. It is not the chosen tag. The forwarder, when it is later published, has to use that same version string. Do not tag from this change.
+The published Atomaestro predecessor is `matter-vis` 0.0.6. No next version is approved. `0.1.0` remains the proposal for the first `atomaestro` release because PyPI treats that name as a new project, not as a patch of `matter-vis` 0.0.6. It is not the chosen tag. Do not tag from this change.
 
 ## Still open
 
 - The pending publisher is configured. The GitHub environment `pypi` reviewer and tag limits are unchanged.
 - A user-confirmed MolCrysKit release replaces the direct URL, and the metadata check then passes.
 - A chosen tag publishes `atomaestro` and is verified by install.
-- Separate publication of the empty `matter-vis` forwarder, only after that publish. The forwarder can be built locally. It is not on PyPI.
+- An empty `matter-vis` forwarder is not published. Automatic `pip install -U matter-vis` is not a supported migration.
 - No second command. `atomestro` in issue #316 is a stale spelling and is not a console script. The command remains `mat-vis`. The help banner still says `MatterVis`; changing that string is a separate decision.
 - Name, domain, and trademark review. The PyPI 404s above are not that review and are not a commercial signoff.
 - Dependent-pin updates after `atomaestro` is actually on PyPI.
@@ -162,4 +144,4 @@ The published Atomaestro predecessor is `matter-vis` 0.0.6. No next version is a
 
 This draft is not posted.
 
-The GitHub repository is SchrodingersCattt/Atomaestro. The command remains `mat-vis`. Python imports remain `mat_viewer`. The package on PyPI today is still `matter-vis` 0.0.6. This repository builds `atomaestro`, which is not published yet. An empty `matter-vis` forwarder can be built from a local wheel and is not published. No new command was added. This note is not a release announcement.
+The GitHub repository is SchrodingersCattt/Atomaestro. The command remains `mat-vis`. Python imports remain `mat_viewer`. The package on PyPI today is still `matter-vis` 0.0.6. This repository builds `atomaestro`, which is not published yet. Move an existing install by uninstalling `matter-vis` and then installing `atomaestro`, or by using a new environment. No new command was added. This note is not a release announcement.

@@ -1,14 +1,13 @@
-"""The matter-vis forwarder installs atomaestro and owns no modules.
+"""Supported migration is a new environment or uninstall, then atomaestro.
 
-The wheels in this test are built locally. Nothing is downloaded from PyPI
-and nothing is published. The predecessor wheel is a fixture, not the
-public matter-vis 0.0.6 release.
-
-``--no-deps`` keeps ``matter-vis`` ahead of ``atomaestro`` in one
-transaction and skips the MolCrysKit git pin. Installing ``atomaestro``
-first deletes the paths the predecessor recorded, including
-``mat_viewer/__init__.py`` and ``mat-vis``. This test does not fetch the
-pin and does not download public matter-vis 0.0.6.
+An empty matter-vis wheel that depends on atomaestro is not published.
+Pip installs that dependency before it removes the old matter-vis record,
+and that removal deletes the new files. The release check rejects the
+artifact. These wheels are built locally. The predecessor is synthetic
+and is not the public 0.0.6 release. Its file list is the public record's
+mat_viewer paths, with synthetic contents. ``--no-deps`` is used so these
+virtual environments do not fetch the MolCrysKit git pin. It is not the
+supported user command.
 """
 
 from __future__ import annotations
@@ -16,20 +15,30 @@ from __future__ import annotations
 import email
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tarfile
+import textwrap
 import zipfile
+from contextlib import redirect_stderr
 from pathlib import Path
 
 import pytest
 from packaging.requirements import Requirement
 
 ROOT = Path(__file__).resolve().parents[1]
-PREDECESSOR_INIT = b'OWNER = "predecessor"\n'
+PREDECESSOR_INIT = (
+    b'OWNER = "predecessor"\n'
+    b"\n"
+    b"def main() -> None:\n"
+    b'    print("predecessor")\n'
+)
+PUBLIC_RECORD_PATHS = ROOT / "tests" / "fixtures" / "matter_vis_0_0_6_record_paths.txt"
+OVERLAP_SAMPLE = "mat_viewer/tui/app.py"
 _COMMANDS = (
     "render",
     "inspect",
@@ -57,7 +66,12 @@ except ModuleNotFoundError:
     marker = False
 else:
     raise SystemExit("predecessor marker is still importable")
-forwarder = metadata.distribution("matter-vis")
+try:
+    metadata.distribution("matter-vis")
+except metadata.PackageNotFoundError:
+    matter_vis = False
+else:
+    raise SystemExit("matter-vis is installed beside atomaestro")
 atomaestro = metadata.distribution("atomaestro")
 payload = mat_viewer.capabilities()
 
@@ -77,7 +91,6 @@ def owns(paths, suffix):
     return any(item.endswith(suffix) for item in paths)
 
 
-forward_names = names(forwarder)
 atom_names = names(atomaestro)
 print(
     json.dumps(
@@ -88,20 +101,11 @@ print(
             "distribution": payload["distribution"],
             "version": payload["version"],
             "marker_importable": marker,
-            "overlap": sorted(set(resolved(forwarder)) & set(resolved(atomaestro))),
-            "forwarder_code": any("mat_viewer" in item for item in forward_names),
+            "matter_vis": matter_vis,
             "atomaestro_owns_init": owns(atom_names, "mat_viewer/__init__.py"),
-            "forwarder_owns_script": owns(forward_names, "/mat-vis")
-            or owns(forward_names, "/mat-vis.exe"),
             "atomaestro_owns_script": owns(atom_names, "/mat-vis")
             or owns(atom_names, "/mat-vis.exe"),
-            "forwarder_version": forwarder.version,
             "atomaestro_version": atomaestro.version,
-            "forwarder_scripts": [
-                item.name
-                for item in forwarder.entry_points
-                if item.group == "console_scripts"
-            ],
             "atomaestro_scripts": [
                 item.name
                 for item in atomaestro.entry_points
@@ -154,16 +158,36 @@ def _venv_python(root: Path) -> Path:
     return root / "bin" / "python"
 
 
+def _public_record_paths() -> tuple[str, ...]:
+    paths = [
+        line.strip()
+        for line in PUBLIC_RECORD_PATHS.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.startswith("#")
+    ]
+    assert len(paths) == 320
+    assert paths[0] == "mat_viewer/__init__.py"
+    assert OVERLAP_SAMPLE in paths
+    return tuple(paths)
+
+
 def _predecessor(tmp_path: Path) -> Path:
-    """A local matter-vis 0.0.6 that owns a mat_viewer module and mat-vis."""
+    """Synthetic matter-vis 0.0.6 with the public record's mat_viewer paths.
+
+    The bytes are not the published wheel. The path list is. The console
+    script is included because the public entry point is ``mat-vis`` and
+    pip removes console scripts from the installed distribution even when
+    the wheel record does not list the generated script.
+    """
     project = tmp_path / "predecessor"
-    package = project / "mat_viewer"
-    package.mkdir(parents=True)
-    (package / "__init__.py").write_text('OWNER = "predecessor"\n', encoding="utf-8")
-    (package / "marker.py").write_text(
-        "def main() -> None:\n    print('predecessor')\n",
-        encoding="utf-8",
-    )
+    for relative in _public_record_paths():
+        target = project / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if relative == "mat_viewer/__init__.py":
+            target.write_bytes(PREDECESSOR_INIT)
+        elif relative.endswith(".py"):
+            target.write_text('OWNER = "predecessor"\n', encoding="utf-8")
+        else:
+            target.write_text("predecessor\n", encoding="utf-8")
     (project / "pyproject.toml").write_text(
         """\
 [build-system]
@@ -173,14 +197,17 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "matter-vis"
 version = "0.0.6"
-description = "Local predecessor fixture. Not the published release."
+description = "Synthetic predecessor. Not the published release."
 requires-python = ">=3.10"
 
 [project.scripts]
-mat-vis = "mat_viewer.marker:main"
+mat-vis = "mat_viewer:main"
 
 [tool.setuptools.packages.find]
 include = ["mat_viewer*"]
+
+[tool.setuptools.package-data]
+mat_viewer = ["**/*"]
 """,
         encoding="utf-8",
     )
@@ -191,6 +218,7 @@ include = ["mat_viewer*"]
         check=False,
         capture_output=True,
         text=True,
+        env=_build_env(),
     )
     assert completed.returncode == 0, completed.stderr
     wheels = list(output.glob("*.whl"))
@@ -202,6 +230,18 @@ def _clean_env() -> dict[str, str]:
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)
     env["PYTHONNOUSERSITE"] = "1"
+    return env
+
+
+def _build_env() -> dict[str, str]:
+    """Outer interpreter, without the checkout on ``PYTHONPATH``.
+
+    ``build`` is installed for that interpreter. ``PYTHONNOUSERSITE`` would
+    hide it. The virtual environments used for install probes set
+    ``PYTHONNOUSERSITE`` separately.
+    """
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
     return env
 
 
@@ -249,40 +289,39 @@ def _wheelhouse(directory: Path, *wheels: Path) -> Path:
     return house
 
 
-def _upgrade(python: Path, house: Path, cwd: Path) -> None:
-    """Upgrade matter-vis before installing atomaestro.
-
-    Listing atomaestro first makes pip remove the new modules while it
-    deletes the predecessor record. ``--no-deps`` keeps that command order
-    and skips the git pin.
-    """
-    _pip(
-        python,
-        [
-            "install",
-            "--upgrade",
-            "--no-index",
-            "--find-links",
-            str(house),
-            "--no-deps",
-            "matter-vis",
-            "atomaestro",
-        ],
-        cwd,
+def _make_venv(path: Path, cwd: Path) -> Path:
+    subprocess.run(
+        [sys.executable, "-m", "venv", str(path)],
+        check=True,
+        cwd=cwd,
+        env=_clean_env(),
     )
+    return _venv_python(path)
 
 
 def _assert_predecessor(python: Path, cwd: Path) -> None:
     script = _script(python)
     assert script.is_file()
     text = script.read_text(encoding="utf-8")
-    assert "from mat_viewer.marker import main" in text
+    assert "from mat_viewer import main" in text
     assert "from mat_viewer.cli import main" not in text
     run = _run([str(script)], cwd)
     assert run.returncode == 0, run.stderr
     assert run.stdout == "predecessor\n"
-    init = _purelib(python, cwd) / "mat_viewer" / "__init__.py"
+    pure = _purelib(python, cwd)
+    init = pure / "mat_viewer" / "__init__.py"
     assert init.read_bytes() == PREDECESSOR_INIT
+    sample = pure / OVERLAP_SAMPLE
+    assert sample.read_text(encoding="utf-8") == 'OWNER = "predecessor"\n'
+    recorded = {
+        line.split(",", 1)[0]
+        for line in (next(pure.glob("matter_vis-0.0.6.dist-info/RECORD"))).read_text(
+            encoding="utf-8"
+        ).splitlines()
+        if line
+    }
+    missing = [path for path in _public_record_paths() if path not in recorded]
+    assert missing == []
 
 
 def _assert_real_install(python: Path, cwd: Path, wheel_init: bytes) -> bytes:
@@ -319,53 +358,12 @@ def _assert_real_install(python: Path, cwd: Path, wheel_init: bytes) -> bytes:
     assert reported["version"] == "9.9.9"
     assert reported["marker_importable"] is False
     assert not (pure / "mat_viewer" / "marker.py").exists()
-    assert reported["overlap"] == []
-    assert reported["forwarder_code"] is False
+    assert reported["matter_vis"] is False
     assert reported["atomaestro_owns_init"] is True
-    assert reported["forwarder_owns_script"] is False
     assert reported["atomaestro_owns_script"] is True
-    assert reported["forwarder_version"] == "9.9.9"
     assert reported["atomaestro_version"] == "9.9.9"
-    assert reported["forwarder_scripts"] == []
     assert reported["atomaestro_scripts"] == ["mat-vis"]
     return on_disk
-
-
-def _assert_library_removed(python: Path, cwd: Path) -> None:
-    assert not _script(python).exists()
-    pure = _purelib(python, cwd)
-    assert not (pure / "mat_viewer").exists()
-    imported = _run([str(python), "-c", "import mat_viewer"], cwd)
-    assert imported.returncode != 0
-    assert "ModuleNotFoundError" in imported.stderr
-    assert "mat_viewer" in imported.stderr
-    probe = _run(
-        [
-            str(python),
-            "-c",
-            """
-import importlib.metadata as metadata
-import json
-forwarder = metadata.distribution("matter-vis")
-try:
-    metadata.distribution("atomaestro")
-except metadata.PackageNotFoundError:
-    present = False
-else:
-    present = True
-names = [str(item).replace("\\\\", "/") for item in forwarder.files or []]
-print(json.dumps({
-    "forwarder": forwarder.version,
-    "atomaestro": present,
-    "code": any("mat_viewer" in item for item in names),
-}))
-""",
-        ],
-        cwd,
-    )
-    assert probe.returncode == 0, probe.stderr
-    reported = json.loads(probe.stdout)
-    assert reported == {"forwarder": "9.9.9", "atomaestro": False, "code": False}
 
 
 @pytest.mark.timeout(180)
@@ -425,103 +423,117 @@ def test_forwarder_matches_the_wheel_and_replaces_a_local_predecessor(
     assert not any("mat_viewer" in name for name in members)
 
     checker = distribution._checker()
-    assert checker.main(["--project", "atomaestro", "--tag", "v9.9.9", str(wheel)]) == 1
-    assert checker.main(["--project", "matter-vis", "--tag", "v9.9.9", str(wheel)]) == 0
+    refused = io.StringIO()
+    with redirect_stderr(refused):
+        assert checker.main(["--project", "matter-vis", "--tag", "v9.9.9", str(wheel)]) == 1
+    assert "must not be published" in refused.getvalue()
+    mismatch = io.StringIO()
+    with redirect_stderr(mismatch):
+        assert checker.main(["--project", "atomaestro", "--tag", "v9.9.9", str(wheel)]) == 1
+    assert "must not be published" in mismatch.getvalue()
+    bare = io.StringIO()
+    with redirect_stderr(bare):
+        assert checker.main(["--tag", "v9.9.9", str(wheel)]) == 1
+    assert "must not be published" in bare.getvalue()
+    assert builder.main([str(source), "--outdir", str(tmp_path / "refused")]) == 2
+    assert not (tmp_path / "refused").exists()
 
     wheel_init = _wheel_bytes(source, "mat_viewer/__init__.py")
     assert wheel_init != PREDECESSOR_INIT
     assert b"def __getattr__" in wheel_init
+
     house = _wheelhouse(tmp_path, wheel, source)
     predecessor = _predecessor(tmp_path)
     cwd = tmp_path / "run"
     cwd.mkdir()
+    sample = _wheel_bytes(source, OVERLAP_SAMPLE)
+    assert b"predecessor" not in sample
 
-    kept = tmp_path / "kept"
-    python = _venv_python(kept)
-    subprocess.run(
-        [sys.executable, "-m", "venv", str(kept)],
-        check=True,
-        cwd=cwd,
-        env=_clean_env(),
-    )
-    _pip(python, ["install", "--no-deps", str(predecessor)], cwd)
-    _assert_predecessor(python, cwd)
-    _upgrade(python, house, cwd)
-    installed = _assert_real_install(python, cwd, wheel_init)
-    _pip(python, ["uninstall", "-y", "matter-vis"], cwd)
-    assert _script(python).read_text(encoding="utf-8").count("from mat_viewer.cli import main") == 1
-    capabilities = _run([str(_script(python)), "capabilities", "--json"], cwd)
-    assert capabilities.returncode == 0, capabilities.stderr
-    assert json.loads(capabilities.stdout)["version"] == "9.9.9"
-    remaining = _run(
+    fresh = _make_venv(tmp_path / "fresh", cwd)
+    _pip(
+        fresh,
         [
-            str(python),
-            "-c",
-            """
-import hashlib, importlib.metadata as metadata, json
-from pathlib import Path
-import mat_viewer
-path = Path(mat_viewer.__file__).resolve()
-try:
-    metadata.distribution("matter-vis")
-except metadata.PackageNotFoundError:
-    present = False
-else:
-    present = True
-payload = mat_viewer.capabilities()
-print(json.dumps({
-    "file": str(path),
-    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-    "matter_vis": present,
-    "version": payload["version"],
-    "distribution": payload["distribution"],
-    "atomaestro": metadata.distribution("atomaestro").version,
-}))
-""",
+            "install",
+            "--no-index",
+            "--find-links",
+            str(house),
+            "--no-deps",
+            "atomaestro",
         ],
         cwd,
     )
-    assert remaining.returncode == 0, remaining.stderr
-    after_uninstall = json.loads(remaining.stdout)
-    assert after_uninstall["matter_vis"] is False
-    assert after_uninstall["atomaestro"] == "9.9.9"
-    assert after_uninstall["version"] == "9.9.9"
-    assert after_uninstall["distribution"] == "atomaestro"
-    reread = Path(after_uninstall["file"])
-    assert reread == (_purelib(python, cwd) / "mat_viewer" / "__init__.py").resolve()
-    assert reread.read_bytes() == installed
-    assert hashlib.sha256(reread.read_bytes()).hexdigest() == after_uninstall["sha256"]
-
-    removed = tmp_path / "removed"
-    other = _venv_python(removed)
-    subprocess.run(
-        [sys.executable, "-m", "venv", str(removed)],
-        check=True,
-        cwd=cwd,
-        env=_clean_env(),
+    _assert_real_install(fresh, cwd, wheel_init)
+    fresh_pure = _purelib(fresh, cwd)
+    assert (fresh_pure / OVERLAP_SAMPLE).read_bytes() == sample
+    only_new = _run(
+        [
+            str(fresh),
+            "-c",
+            (
+                "import importlib.metadata as metadata\n"
+                "try:\n"
+                "    metadata.distribution('matter-vis')\n"
+                "except metadata.PackageNotFoundError:\n"
+                "    print('absent')\n"
+                "else:\n"
+                "    raise SystemExit('matter-vis is installed')\n"
+            ),
+        ],
+        cwd,
     )
-    _pip(other, ["install", "--no-deps", str(predecessor)], cwd)
-    _upgrade(other, house, cwd)
-    _assert_real_install(other, cwd, wheel_init)
-    _pip(other, ["uninstall", "-y", "atomaestro"], cwd)
-    _assert_library_removed(other, cwd)
+    assert only_new.returncode == 0, only_new.stderr
+    assert only_new.stdout.strip() == "absent"
+    _pip(fresh, ["uninstall", "-y", "atomaestro"], cwd)
+    assert not _script(fresh).exists()
+    assert not (fresh_pure / "mat_viewer").exists()
+    fresh_import = _run([str(fresh), "-c", "import mat_viewer"], cwd)
+    assert fresh_import.returncode != 0
+    assert "ModuleNotFoundError" in fresh_import.stderr
 
-    deleted = tmp_path / "deleted"
-    early = _venv_python(deleted)
-    subprocess.run(
-        [sys.executable, "-m", "venv", str(deleted)],
-        check=True,
-        cwd=cwd,
-        env=_clean_env(),
-    )
-    _pip(early, ["install", "--no-deps", str(predecessor)], cwd)
+    migrated = _make_venv(tmp_path / "migrated", cwd)
+    _pip(migrated, ["install", "--no-deps", str(predecessor)], cwd)
+    _assert_predecessor(migrated, cwd)
+    _pip(migrated, ["uninstall", "-y", "matter-vis"], cwd)
+    assert not _script(migrated).exists()
+    migrated_pure = _purelib(migrated, cwd)
+    assert not (migrated_pure / "mat_viewer" / "__init__.py").exists()
+    assert not (migrated_pure / OVERLAP_SAMPLE).exists()
+    removed_import = _run([str(migrated), "-c", "import mat_viewer"], cwd)
+    assert removed_import.returncode != 0
+    assert "ModuleNotFoundError" in removed_import.stderr
     _pip(
-        early,
-        ["install", "--no-index", "--find-links", str(house), "--no-deps", "atomaestro"],
+        migrated,
+        [
+            "install",
+            "--no-index",
+            "--find-links",
+            str(house),
+            "--no-deps",
+            "atomaestro",
+        ],
+        cwd,
+    )
+    _assert_real_install(migrated, cwd, wheel_init)
+    restored = (migrated_pure / OVERLAP_SAMPLE).read_bytes()
+    assert restored == sample
+    assert b'OWNER = "predecessor"' not in restored
+
+    damaged = _make_venv(tmp_path / "damaged", cwd)
+    _pip(damaged, ["install", "--no-deps", str(predecessor)], cwd)
+    _pip(
+        damaged,
+        [
+            "install",
+            "--no-index",
+            "--find-links",
+            str(house),
+            "--no-deps",
+            "atomaestro",
+        ],
         cwd,
     )
     _pip(
-        early,
+        damaged,
         [
             "install",
             "--upgrade",
@@ -533,60 +545,150 @@ print(json.dumps({
         ],
         cwd,
     )
-    pure = _purelib(early, cwd)
-    assert not _script(early).exists()
+    damaged_pure = _purelib(damaged, cwd)
+    assert not _script(damaged).exists()
+    assert not (damaged_pure / "mat_viewer" / "__init__.py").exists()
+    assert not (damaged_pure / OVERLAP_SAMPLE).exists()
+    _pip(damaged, ["uninstall", "-y", "matter-vis", "atomaestro"], cwd)
+    _pip(
+        damaged,
+        [
+            "install",
+            "--no-index",
+            "--find-links",
+            str(house),
+            "--no-deps",
+            "atomaestro",
+        ],
+        cwd,
+    )
+    _assert_real_install(damaged, cwd, wheel_init)
+    assert (damaged_pure / OVERLAP_SAMPLE).read_bytes() == sample
+
+
+def _tiny_wheel(
+    directory: Path,
+    folder: str,
+    dist_name: str,
+    version: str,
+    *,
+    body: str,
+    depend: str | None,
+) -> Path:
+    project = directory / folder
+    project.mkdir(parents=True, exist_ok=True)
+    if dist_name == "atomaestro":
+        package = project / "mat_viewer"
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text(body, encoding="utf-8")
+        (package / "cli.py").write_text(
+            "def main() -> None:\n    print('atomaestro')\n",
+            encoding="utf-8",
+        )
+        scripts = 'mat-vis = "mat_viewer.cli:main"\n'
+        packages = 'include = ["mat_viewer*"]\n'
+        tool = "[tool.setuptools.packages.find]\n" + packages
+    elif depend is None:
+        package = project / "mat_viewer"
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text(body, encoding="utf-8")
+        scripts = 'mat-vis = "mat_viewer:main"\n'
+        tool = "[tool.setuptools.packages.find]\ninclude = [\"mat_viewer*\"]\n"
+    else:
+        scripts = ""
+        tool = "[tool.setuptools]\npackages = []\npy-modules = []\n"
+    dependency = ""
+    if depend is not None:
+        dependency = f"dependencies = [{depend!r}]\n"
+    script_table = f"[project.scripts]\n{scripts}" if scripts else ""
+    (project / "pyproject.toml").write_text(
+        textwrap.dedent(
+            f"""
+            [build-system]
+            requires = ["setuptools>=68"]
+            build-backend = "setuptools.build_meta"
+
+            [project]
+            name = "{dist_name}"
+            version = "{version}"
+            requires-python = ">=3.10"
+            {dependency}
+            {script_table}
+            {tool}
+            """
+        ),
+        encoding="utf-8",
+    )
+    output = directory / f"{folder}-dist"
+    completed = subprocess.run(
+        [sys.executable, "-m", "build", "--no-isolation", "--outdir", str(output)],
+        cwd=project,
+        check=False,
+        capture_output=True,
+        text=True,
+        env=_build_env(),
+    )
+    assert completed.returncode == 0, completed.stderr
+    wheels = list(output.glob("*.whl"))
+    assert len(wheels) == 1
+    return wheels[0]
+
+
+@pytest.mark.timeout(180)
+@pytest.mark.parametrize("pip_version", ["24.0", "26.3"])
+def test_recorded_pip_versions_delete_overlap_until_reinstall(
+    tmp_path: Path,
+    pip_version: str,
+) -> None:
+    """Evidence for two pip releases. This does not cover the versions between them."""
+    body = 'OWNER = "predecessor"\n\ndef main() -> None:\n    print("predecessor")\n'
+    atom_body = 'OWNER = "atomaestro"\n'
+    predecessor = _tiny_wheel(
+        tmp_path, "pred", "matter-vis", "0.0.6", body=body, depend=None
+    )
+    atomaestro = _tiny_wheel(
+        tmp_path, "atom", "atomaestro", "9.9.9", body=atom_body, depend=None
+    )
+    forwarder = _tiny_wheel(
+        tmp_path,
+        "fwd",
+        "matter-vis",
+        "9.9.9",
+        body="",
+        depend="atomaestro==9.9.9",
+    )
+    house = tmp_path / f"house-{pip_version}"
+    house.mkdir()
+    shutil.copy(atomaestro, house / atomaestro.name)
+    shutil.copy(forwarder, house / forwarder.name)
+    cwd = tmp_path / f"cwd-{pip_version}"
+    cwd.mkdir()
+    python = _make_venv(tmp_path / f"venv-{pip_version}", cwd)
+    _pip(python, ["install", "--disable-pip-version-check", f"pip=={pip_version}"], cwd)
+    _pip(python, ["install", "--no-deps", str(predecessor)], cwd)
+    before = _run([str(_script(python))], cwd)
+    assert before.returncode == 0, before.stderr
+    assert before.stdout == "predecessor\n"
+    _pip(python, ["install", "--no-deps", str(atomaestro)], cwd)
+    _pip(
+        python,
+        [
+            "install",
+            "--upgrade",
+            "--no-index",
+            "--find-links",
+            str(house),
+            "--no-deps",
+            "matter-vis",
+        ],
+        cwd,
+    )
+    pure = _purelib(python, cwd)
+    assert not _script(python).exists()
     assert not (pure / "mat_viewer" / "__init__.py").exists()
-    assert (pure / "mat_viewer" / "cli.py").is_file()
-    damaged = _run(
-        [
-            str(early),
-            "-c",
-            """
-import json
-import mat_viewer
-init_api = hasattr(mat_viewer, "capabilities")
-try:
-    import mat_viewer.cli
-except ModuleNotFoundError:
-    cli = False
-else:
-    cli = True
-print(json.dumps({
-    "file": mat_viewer.__file__,
-    "init_api": init_api,
-    "cli": cli,
-}))
-""",
-        ],
-        cwd,
-    )
-    assert damaged.returncode == 0, damaged.stderr
-    assert json.loads(damaged.stdout) == {
-        "file": None,
-        "init_api": False,
-        "cli": True,
-    }
-    recorded = _run(
-        [
-            str(early),
-            "-c",
-            """
-import importlib.metadata as metadata, json
-forwarder = metadata.distribution("matter-vis")
-atomaestro = metadata.distribution("atomaestro")
-names = [str(item).replace("\\\\", "/") for item in forwarder.files or []]
-print(json.dumps({
-    "forwarder": forwarder.version,
-    "atomaestro": atomaestro.version,
-    "code": any("mat_viewer" in item for item in names),
-}))
-""",
-        ],
-        cwd,
-    )
-    assert recorded.returncode == 0, recorded.stderr
-    assert json.loads(recorded.stdout) == {
-        "forwarder": "9.9.9",
-        "atomaestro": "9.9.9",
-        "code": False,
-    }
+    _pip(python, ["uninstall", "-y", "matter-vis", "atomaestro"], cwd)
+    _pip(python, ["install", "--no-deps", str(atomaestro)], cwd)
+    after = _run([str(_script(python))], cwd)
+    assert after.returncode == 0, after.stderr
+    assert after.stdout == "atomaestro\n"
+    assert (pure / "mat_viewer" / "__init__.py").read_text(encoding="utf-8") == atom_body

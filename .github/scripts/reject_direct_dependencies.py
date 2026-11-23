@@ -4,6 +4,10 @@ PyPI returns HTTP 400 ``Can't have direct dependency`` for a Requires-Dist
 entry of the form ``name @ url``. That rule is PEP 440 for public indexes
 and is implemented in ``warehouse.forklift.metadata``. A wheel can build in
 CI and still be rejected at upload time.
+
+The script also rejects an artifact named ``matter-vis``. This repository
+does not publish that name. An upgrade from an installed ``matter-vis``
+deletes files written by ``atomaestro``.
 """
 
 from __future__ import annotations
@@ -115,9 +119,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--project",
         help=(
-            "Required distribution name. The release workflow passes "
-            "atomaestro so a matter-vis forwarder cannot be uploaded "
-            "from dist/."
+            "Distribution name. The release workflow passes atomaestro. "
+            "An artifact named matter-vis is rejected even when this "
+            "option is omitted or matches that name."
         ),
     )
     parser.add_argument(
@@ -146,21 +150,29 @@ def main(argv: list[str] | None = None) -> int:
             (text for label, text in bodies if label in {"METADATA", "PKG-INFO"}),
             "",
         )
-        if args.project is not None:
-            from packaging.utils import canonicalize_name
+        from packaging.utils import canonicalize_name
 
-            actual = distribution_name(canonical)
-            try:
-                normalized = canonicalize_name(actual) if actual else ""
-            except ValueError:
-                normalized = ""
-            if normalized != canonicalize_name(args.project):
-                failed = True
-                print(
-                    f"{path} cannot be uploaded as {args.project}; "
-                    f"its name is {actual or 'missing'}.",
-                    file=sys.stderr,
-                )
+        actual = distribution_name(canonical)
+        try:
+            normalized = canonicalize_name(actual) if actual else ""
+        except ValueError:
+            normalized = ""
+        if normalized == "matter-vis":
+            failed = True
+            print(
+                f"{path} must not be published. Upgrading an installed "
+                "matter-vis deletes files atomaestro has written, including "
+                "mat_viewer and mat-vis. Install atomaestro in a new "
+                "environment, or uninstall matter-vis first.",
+                file=sys.stderr,
+            )
+        if args.project is not None and normalized != canonicalize_name(args.project):
+            failed = True
+            print(
+                f"{path} cannot be uploaded as {args.project}; "
+                f"its name is {actual or 'missing'}.",
+                file=sys.stderr,
+            )
         if not requires_dist_values(canonical):
             failed = True
             print(

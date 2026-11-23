@@ -17,10 +17,10 @@ python -m pip install atomaestro
 ```
 
 Do not install published `matter-vis` 0.0.6 and `atomaestro` into the same
-environment. That release owns `mat_viewer` and the `mat-vis` script. The
-repository can build an empty forwarder that does not own those files. The
-forwarder is not published and is not this install command. The migration
-notes are in the repository file `docs/rebranding.md`. Add optional extras
+environment. That release owns `mat_viewer` and the `mat-vis` script. After
+`atomaestro` is published, uninstall `matter-vis` or use a new environment.
+`pip install -U matter-vis` is not the migration. The migration notes are in
+the repository file `docs/rebranding.md`. Add optional extras
 only when required; see [capabilities and installation](./capabilities-and-install.md).
 
 For requested Atomaestro source changes, install a checkout instead:

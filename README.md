@@ -71,10 +71,10 @@ pip install atomaestro
 ```
 
 Do not install published `matter-vis` 0.0.6 and `atomaestro` into the same
-environment. That release owns `mat_viewer` and the `mat-vis` script. This
-repository can build an empty `matter-vis` forwarder that does not own those
-files. The forwarder is not published, and it is not the install command.
-No release version has been chosen.
+environment. That release owns `mat_viewer` and the `mat-vis` script. After
+`atomaestro` is published, uninstall `matter-vis` or use a new environment.
+`pip install -U matter-vis` is not the migration. No release version has been
+chosen.
 
 ### From source (development)
 

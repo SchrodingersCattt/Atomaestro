@@ -1,10 +1,12 @@
 """Build an empty matter-vis wheel that depends on one atomaestro wheel.
 
-The forwarder ships no packages, modules, or console scripts. ``atomaestro``
-keeps ``mat_viewer`` and ``mat-vis``. The release workflow uploads ``dist/``
-as the ``atomaestro`` project, so this script refuses to write there.
+The command-line entry point refuses to write that wheel. Pip installs the
+dependency before it removes an older matter-vis record, and that removal
+deletes ``mat_viewer`` and ``mat-vis``. The release check rejects the
+artifact. ``build_forwarder`` remains for the test that proves the refusal.
 
-The result is a local artifact. It is not a PyPI release.
+``atomaestro`` keeps ``mat_viewer`` and ``mat-vis``. The supported move is
+a new environment, or ``pip uninstall`` of matter-vis, then atomaestro.
 """
 
 from __future__ import annotations
@@ -109,11 +111,10 @@ def render_readme(version: str) -> str:
         f"This distribution depends on `atomaestro=={version}` and ships no "
         "Python modules and no console scripts. `atomaestro` owns "
         "`mat_viewer` and the `mat-vis` command.\n\n"
-        "This file is a local build. It is not a PyPI release. Upload it "
-        "only after that same `atomaestro` version is already on PyPI, and "
-        "upload it with the existing `matter-vis` project rather than the "
-        "`atomaestro` publisher. Do not place it in the repository `dist/` "
-        "directory.\n"
+        "Do not upload this wheel. Pip installs atomaestro before it "
+        "removes an older matter-vis record, and that removal deletes "
+        "mat_viewer and mat-vis. Use a new environment, or uninstall "
+        "matter-vis, then install atomaestro.\n"
     )
 
 
@@ -169,17 +170,18 @@ def main(argv: list[str] | None = None) -> int:
         "--outdir",
         type=Path,
         required=True,
-        help="Directory outside dist/ for the forwarder artifacts.",
+        help="Unused. The command refuses to write a matter-vis wheel.",
     )
-    args = parser.parse_args(argv)
-    try:
-        artifacts = build_forwarder(args.wheel, args.outdir)
-    except (OSError, ValueError, RuntimeError) as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
-    for path in artifacts:
-        print(path)
-    return 0
+    parser.parse_args(argv)
+    print(
+        "Refusing to build a matter-vis wheel. An empty forwarder is not "
+        "a supported upgrade: pip installs atomaestro and then deletes "
+        "the files recorded by the installed matter-vis. Uninstall "
+        "matter-vis, or use a new environment, then install atomaestro. "
+        "The release check rejects a matter-vis artifact.",
+        file=sys.stderr,
+    )
+    return 2
 
 
 if __name__ == "__main__":

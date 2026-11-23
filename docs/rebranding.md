@@ -85,7 +85,18 @@ Transition after the account owner has published `atomaestro`:
 2. Publish a later empty release of the existing `matter-vis` project from that forwarder, at the same version as the published `atomaestro`. Upload it with the existing `matter-vis` project, not the `atomaestro` publisher.
 3. Leave `matter-vis` able to accept that upload. [Archiving](https://docs.pypi.org/project-management/archiving-projects/) blocks new uploads, so archive only after the forwarder policy is finished. Do not delete the project.
 
-Until that upload exists, `pip install -U matter-vis` on PyPI stays on 0.0.6. It does not upgrade to `atomaestro`. Put `atomaestro` in a fresh environment, or uninstall `matter-vis` before installing it. A local test installs a fixture predecessor that owns `mat_viewer`, then upgrades to the forwarder plus the local `atomaestro` wheel with `--no-deps`. That test does not download the public 0.0.6 release and does not show a public upgrade.
+Until that upload exists, `pip install -U matter-vis` on PyPI stays on 0.0.6. It does not upgrade to `atomaestro`. Put `atomaestro` in a fresh environment, or uninstall `matter-vis` before installing it.
+
+After both wheels exist locally, pip still deletes overlapping paths when `atomaestro` is installed before the old `matter-vis` record is removed. The old record is what pip deletes. On this fixture those paths are `mat_viewer/__init__.py` and `mat-vis`. The console script is then gone. `import mat_viewer` loads a namespace package and the `capabilities` function from `__init__.py` is absent. Files the predecessor did not record, such as `mat_viewer/cli.py`, stay on disk and can still be imported. Both distributions still show as installed. The same deletion is what a dependency-first `pip install --upgrade matter-vis` does, and that command also follows the MolCrysKit git pin. Checked through pip 26.3. This fixture is not the public 0.0.6 file list, and the test does not download that release.
+
+The local order that keeps the files names `matter-vis` before `atomaestro` and uses `--no-deps`, so pip does not reorder the packages or fetch the git pin:
+
+```bash
+python -m pip install --upgrade --no-index --find-links /tmp/wheelhouse \
+  --no-deps matter-vis atomaestro
+```
+
+The test installs the synthetic predecessor, runs its `mat-vis`, then runs `mat-vis capabilities --json` and imports `mat_viewer` from the virtual environment. It reads the installed `mat_viewer/__init__.py` again and compares those bytes with the `atomaestro` wheel. Uninstalling the forwarder leaves the command and the import in place. Uninstalling `atomaestro` while the forwarder remains removes the command and the modules. None of this is a public upgrade.
 
 ## Release workflow and trusted publisher
 

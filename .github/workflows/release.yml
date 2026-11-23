@@ -128,6 +128,7 @@ jobs:
           RELEASE_TAG: ${{ needs.release-checks.outputs.tag }}
         run: |
           python .github/scripts/reject_direct_dependencies.py \
+            --project atomaestro \
             --tag "${RELEASE_TAG}" \
             dist/*
 
@@ -180,6 +181,7 @@ jobs:
       - name: Reject a non-release tag or direct-reference requirements
         run: |
           python .github/scripts/reject_direct_dependencies.py \
+            --project atomaestro \
             --tag "${GITHUB_REF_NAME}" \
             dist/*
 
@@ -235,6 +237,7 @@ jobs:
             exit 1
           fi
           python .github/scripts/reject_direct_dependencies.py \
+            --project atomaestro \
             --tag "${GITHUB_REF_NAME}" \
             dist/*
           gh release create "${GITHUB_REF_NAME}" dist/* \

@@ -31,6 +31,12 @@ def requires_dist_values(metadata_text: str) -> list[str]:
     return list(message.get_all("Requires-Dist") or [])
 
 
+def distribution_name(metadata_text: str) -> str:
+    """Return the canonical Name header, or an empty string when it is absent."""
+    message = email.message_from_string(metadata_text)
+    return (message.get("Name") or "").strip()
+
+
 def direct_reference_requirements(metadata_text: str) -> list[str]:
     """Return Requires-Dist values that carry a PEP 440 direct URL."""
     from packaging.requirements import Requirement
@@ -47,7 +53,7 @@ def requires_txt_as_metadata(text: str) -> str:
     lines = ["Metadata-Version: 2.1"]
     for raw in text.splitlines():
         line = raw.strip()
-        if not line or line.startswith("#") or line.startswith("["):
+        if not line or line.startswith(("#", "[")):
             continue
         lines.append(f"Requires-Dist: {line}")
     return "\n".join(lines) + "\n"
@@ -107,6 +113,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Release tag. When set, it must be a final vX.Y.Z tag.",
     )
     parser.add_argument(
+        "--project",
+        help=(
+            "Required distribution name. The release workflow passes "
+            "atomaestro so a matter-vis forwarder cannot be uploaded "
+            "from dist/."
+        ),
+    )
+    parser.add_argument(
         "artifacts",
         nargs="+",
         type=Path,
@@ -120,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
     failed = False
+    saw_direct_reference = False
     for path in args.artifacts:
         try:
             bodies = artifact_texts(path)
@@ -131,6 +146,21 @@ def main(argv: list[str] | None = None) -> int:
             (text for label, text in bodies if label in {"METADATA", "PKG-INFO"}),
             "",
         )
+        if args.project is not None:
+            from packaging.utils import canonicalize_name
+
+            actual = distribution_name(canonical)
+            try:
+                normalized = canonicalize_name(actual) if actual else ""
+            except ValueError:
+                normalized = ""
+            if normalized != canonicalize_name(args.project):
+                failed = True
+                print(
+                    f"{path} cannot be uploaded as {args.project}; "
+                    f"its name is {actual or 'missing'}.",
+                    file=sys.stderr,
+                )
         if not requires_dist_values(canonical):
             failed = True
             print(
@@ -143,6 +173,7 @@ def main(argv: list[str] | None = None) -> int:
             if not blocked:
                 continue
             failed = True
+            saw_direct_reference = True
             print(
                 f"{path} cannot be uploaded to PyPI; {label} uses a "
                 "direct reference:",
@@ -150,12 +181,13 @@ def main(argv: list[str] | None = None) -> int:
             )
             for value in blocked:
                 print(f"  {value}", file=sys.stderr)
-    if failed:
+    if saw_direct_reference:
         print(
             "PyPI rejects these dependencies. Replace them with a normal "
             "version requirement before publishing.",
             file=sys.stderr,
         )
+    if failed:
         return 1
     return 0
 

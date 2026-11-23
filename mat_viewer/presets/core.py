@@ -165,12 +165,10 @@ DEFAULT_STRUCTURE_PRESETS = {
     "DAP-4": {
         "view_direction": [1.0, 0.0, 0.0],
         "up": [0.0, 0.0, 1.0],
-        "show_hydrogen": False,
     },
     "SY": {
         "view_direction": [1.0, 1.0, 1.0],
         "up": [0.0, 0.0, 1.0],
-        "show_hydrogen": False,
     },
 }
 
@@ -301,7 +299,7 @@ def scene_from_camera(position: Iterable[float], focal_point: Iterable[float], u
 def scene_to_preset_entry(scene: Dict[str, Any], camera=None, style=None) -> Dict[str, Any]:
     entry = {
         "camera": _json_safe(camera or scene.get("camera", {})),
-        "show_hydrogen": bool(scene.get("show_hydrogen", False)),
+        "show_hydrogen": bool(scene.get("show_hydrogen", True)),
     }
     if style:
         entry["style"] = _json_safe(style)

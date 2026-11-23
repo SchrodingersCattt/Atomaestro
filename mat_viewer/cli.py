@@ -482,7 +482,7 @@ def _tui_main(args: argparse.Namespace) -> None:
             show_minor=args.show_minor,
             show_axes=bool(getattr(args, "axes", True)),
             **interactive_depth_options(args),
-            show_hydrogen=bool(getattr(args, "hydrogen", False)),
+            show_hydrogen=bool(getattr(args, "hydrogen", True)),
             show_boundary=bool(getattr(args, "boundary", False)),
             initial_level=initial_level,
         )

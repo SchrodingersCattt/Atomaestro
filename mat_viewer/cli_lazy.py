@@ -150,9 +150,12 @@ def add_session_arguments(parser: argparse.ArgumentParser) -> None:
     """Add machine-readable terminal rendering and session options."""
     parser.add_argument(
         "--hydrogen",
-        action="store_true",
-        default=False,
-        help="Draw hydrogen atoms. Hidden by default so heavy atoms stay readable.",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Draw hydrogen atoms already present in the input (default). "
+            "--no-hydrogen hides them."
+        ),
     )
     parser.add_argument(
         "--boundary",

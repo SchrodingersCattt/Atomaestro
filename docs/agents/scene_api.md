@@ -205,12 +205,16 @@ Both `mat_viewer.scene.build_scene_from_atoms` and `build_scene_from_cif`
 accept `show_hydrogen: bool | None = None`. Explicit `False` hides hydrogen
 atoms and their incident bonds even when the preset enables them; explicit
 `True` shows them. Omission or `None` resolves the structure entry's
-`show_hydrogen` first, then the merged global/structure style. The effective
-boolean is recorded in both `scene["show_hydrogen"]` and
+`show_hydrogen` first, then the merged global/structure style. When neither
+sets the key, hydrogen atoms already present in the input are shown. The
+effective boolean is recorded in both `scene["show_hydrogen"]` and
 `scene["style"]["show_hydrogen"]`; the supplied preset is not mutated.
-This is a display filter, not a change to source atoms or connectivity.
-`build_bundle_scene` retains its boolean `show_hydrogen=False` default and
-separate on/off scene-cache entries; it does not adopt omission semantics.
+This is a display filter, not a change to source atoms or connectivity, and
+it does not add hydrogen atoms or coordinates that the input did not contain.
+The loaded bundle's first formula-unit scene uses that same omission
+resolution. `build_bundle_scene` defaults `show_hydrogen=True`. Explicit
+`False` still hides existing hydrogens. On and off results stay in separate
+scene-cache entries; the bundle builder does not adopt omission semantics.
 Those entries are bounded (8 scenes / 64 MiB for the base map, 6 scenes /
 96 MiB after transforms). See `docs/redesign/caches.md`.
 

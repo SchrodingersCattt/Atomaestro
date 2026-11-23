@@ -51,7 +51,7 @@ class TerminalDisplayState:
     show_minor: bool
     mono: bool
     show_axes: bool = True
-    show_hydrogen: bool = False
+    show_hydrogen: bool = True
     show_boundary: bool = False
     show_depth: bool = True
     parallax: bool = False

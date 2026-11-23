@@ -98,7 +98,7 @@ def test_occluded_atom_is_absent_and_bonds_differ_from_cell_edges() -> None:
     assert any(char in frame for char in "-|/\\")
 
 
-def test_hydrogen_and_boundary_replicas_are_hidden_until_requested() -> None:
+def test_existing_hydrogen_is_drawn_and_can_be_hidden() -> None:
     crystal = CrystalIR(
         lattice=_lattice(),
         atoms=[
@@ -108,15 +108,16 @@ def test_hydrogen_and_boundary_replicas_are_hidden_until_requested() -> None:
         ],
         bonds=[BondIR(0, 1, 1.5)],
     )
-    hidden = _frame(crystal, show_cell=False, show_bonds=True)
-    shown = _frame(
-        crystal, show_cell=False, show_bonds=True, show_hydrogen=True, show_boundary=True
+    shown = _frame(crystal, show_cell=False, show_bonds=True)
+    hidden = _frame(crystal, show_cell=False, show_bonds=True, show_hydrogen=False)
+    with_boundary = _frame(
+        crystal, show_cell=False, show_bonds=True, show_boundary=True
     )
 
-    assert "H" not in hidden
-    assert "O" not in hidden
-    assert "C" in hidden
-    assert "H" in shown and "O" in shown
+    assert "C" in shown and "H" in shown
+    assert "O" not in shown
+    assert "H" not in hidden and "O" not in hidden and "C" in hidden
+    assert "H" in with_boundary and "O" in with_boundary
 
 
 def test_overlapping_and_long_labels_stay_off_occupied_cells() -> None:
@@ -168,11 +169,12 @@ def test_hydrogen_key_toggles_the_atom_picture() -> None:
         app = CrystalTUI(crystal, mono=True, label_mode="element", show_cell=False)
         async with app.run_test(size=(60, 18)) as pilot:
             await pilot.pause()
-            assert "H" not in app.query_one("#canvas").frame_text
-            await pilot.press("h")
-            await pilot.pause()
             assert app.controller.state.display.show_hydrogen is True
             assert "H" in app.query_one("#canvas").frame_text
+            await pilot.press("h")
+            await pilot.pause()
+            assert app.controller.state.display.show_hydrogen is False
+            assert "H" not in app.query_one("#canvas").frame_text
 
     asyncio.run(exercise())
 
@@ -223,7 +225,13 @@ def test_static_fit_ignores_hidden_hydrogen_and_boundary() -> None:
         bonds=[BondIR(0, 1, 1.4)],
     )
     frame = _frame(
-        crystal, width=80, height=12, show_cell=False, show_bonds=True, label_mode="element"
+        crystal,
+        width=80,
+        height=12,
+        show_cell=False,
+        show_bonds=True,
+        label_mode="element",
+        show_hydrogen=False,
     )
     # With the distant hidden atoms filtered from the fit, C--N fills most columns.
     assert "C" in frame and "N" in frame
@@ -273,6 +281,7 @@ def test_auto_label_mode_ignores_hidden_hydrogen_density() -> None:
         show_cell=False,
         show_bonds=False,
         label_mode="auto",
+        show_hydrogen=False,
     )
     assert "●" not in frame
     assert "C" in frame and "N" in frame and "O" in frame

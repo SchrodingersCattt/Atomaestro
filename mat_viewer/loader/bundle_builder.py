@@ -141,7 +141,6 @@ def build_loaded_crystal_from_atoms(
             M=M,
             R=R,
             preset=preset,
-            show_hydrogen=False,
             display_mode="formula_unit",
             ops=ops,
             formula_unit_atoms=formula_unit_atoms,
@@ -177,6 +176,7 @@ def build_loaded_crystal_from_atoms(
         )
     initial_scene["fragment_table"] = fragment_table
     initial_scene["atom_fragment_labels"] = atom_fragment_labels
+    resolved_show_hydrogen = bool(initial_scene.get("show_hydrogen"))
 
     with perf_log.time_block(
         "loader:fragment_table_topology",
@@ -196,7 +196,7 @@ def build_loaded_crystal_from_atoms(
     fragment_table_cache = {
         fragment_table_cache_key(
             display_mode="formula_unit",
-            show_hydrogen=False,
+            show_hydrogen=resolved_show_hydrogen,
             include_boundary_replicas=True,
             include_cross_boundary_bond_endpoints=True,
             include_minor=True,
@@ -227,7 +227,7 @@ def build_loaded_crystal_from_atoms(
         scene_cache={
             scene_cache_key(
                 display_mode="formula_unit",
-                show_hydrogen=False,
+                show_hydrogen=resolved_show_hydrogen,
                 bond_scale=bond_scale,
                 bond_thresholds=bond_thresholds,
             ): initial_scene

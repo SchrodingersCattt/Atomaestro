@@ -119,7 +119,7 @@ def build_scene_from_atoms(
     entry = preset.get("structures", {}).get(name, {})
     style = deep_merge(style, entry.get("style"))
     show_h = (
-        bool(entry.get("show_hydrogen", style.get("show_hydrogen", False)))
+        bool(entry.get("show_hydrogen", style.get("show_hydrogen", True)))
         if show_hydrogen is None
         else bool(show_hydrogen)
     )

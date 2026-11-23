@@ -245,7 +245,7 @@ def test_controller_display_transitions_are_absolute() -> None:
         "slice_axis": "off",
         "slice_index": 0,
         "slice_width": 1.0,
-        "show_hydrogen": False,
+        "show_hydrogen": True,
         "show_boundary": False,
     }
 

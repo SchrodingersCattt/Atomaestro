@@ -81,7 +81,7 @@ def build_cube_figure(
     camera: dict[str, Any] | None = None,
     style: dict[str, Any] | None = None,
     display_mode: str = "formula_unit",
-    show_hydrogen: bool = False,
+    show_hydrogen: bool = True,
     include_boundary_replicas: bool = True,
     include_interaction_traces: bool = True,
     periodic: bool | None = None,
@@ -125,7 +125,8 @@ def build_cube_figure(
     display_mode : str
         Display mode for the structure ("formula_unit", "unit_cell", etc.).
     show_hydrogen : bool
-        Whether to show hydrogen atoms.
+        Draw hydrogen atoms already present in the structure. Default True.
+        This does not add hydrogen atoms that the file does not contain.
     include_boundary_replicas : bool
         Include complete molecular images that cross a unit-cell boundary.
     include_interaction_traces : bool

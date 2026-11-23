@@ -324,7 +324,7 @@ Notes for callers:
   `ball`, `ball_stick`, `stick`, `ortep`, and `wireframe` styles. `disorder` is `opacity`, `dashed_bonds`,
   `outline_rings`, `color_shift`, or `none`. Fresh scenes default to
   occupancy-based disorder opacity (`disorder="opacity"`, `minor_opacity=0.35`),
-  hydrogens + unit-cell box visible, labels hidden, and
+  hydrogens already present in the input + unit-cell box visible, labels hidden, and
   `label_mode="unique_sites"`.
 
   Legacy aliases that still work: `topology_fragment_type` (`"A"` /

@@ -187,7 +187,7 @@ class CrystalTUI(App):
         slice_axis: str = "off",
         slice_index: int = 0,
         slice_width: float = 1.0,
-        show_hydrogen: bool = False,
+        show_hydrogen: bool = True,
         show_boundary: bool = False,
         compact: bool = False,
         initial_level: str = AUTO_DISPLAY_LEVEL,

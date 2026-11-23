@@ -157,7 +157,7 @@ def build_empty_bundle(
             "up": [0.0, 1.0, 0.0],
         },
         "style": {},
-        "show_hydrogen": False,
+        "show_hydrogen": True,
         "has_minor": False,
         "preset_entry": {},
         "display_mode": "formula_unit",
@@ -181,7 +181,7 @@ def build_empty_bundle(
         scene_cache={
             scene_cache_key(
                 display_mode="formula_unit",
-                show_hydrogen=False,
+                show_hydrogen=True,
             ): scene
         },
         fragment_table=[],
@@ -189,7 +189,7 @@ def build_empty_bundle(
         fragment_table_cache={
             fragment_table_cache_key(
                 display_mode="formula_unit",
-                show_hydrogen=False,
+                show_hydrogen=True,
             ): ([], [])
         },
         atom_fragment_labels=[],
@@ -557,7 +557,7 @@ def build_bundle_scene(
     bundle: LoadedCrystal,
     *,
     display_mode: str = "formula_unit",
-    show_hydrogen: bool = False,
+    show_hydrogen: bool = True,
     preset: Optional[Dict[str, Any]] = None,
     transforms: Optional[list[Dict[str, Any]]] = None,
     include_boundary_replicas: bool = True,

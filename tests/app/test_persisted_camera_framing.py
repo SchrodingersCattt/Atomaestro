@@ -301,6 +301,139 @@ def test_drag_that_still_frames_is_stored_unchanged(tmp_path: Path):
         backend.close()
 
 
+def test_late_pose_follows_visibility_for_both_projections(tmp_path: Path):
+    """A late capture is judged by whether it shows the structure.
+
+    A center of 0.4 or 0.6 still frames this cell and is stored. A center
+    of 20 does not, so the server replaces it and advances the revision.
+    The same decision applies to a dotted center and to both projections.
+    An older revision is rejected and the stored camera is left alone.
+    """
+    backend = _backend(tmp_path)
+    try:
+        scene_id = backend.active_scene_id()
+        for projection in ("orthographic", "perspective"):
+            backend.set_projection(projection, scene_id=scene_id, broadcast=False)
+            before = backend.get_state(scene_id)
+            eye = before["camera"]["eye"]
+            up = before["camera"]["up"]
+
+            def camera_at(
+                center: tuple[float, float, float],
+                eye: dict = eye,
+                up: dict = up,
+                projection: str = projection,
+            ) -> dict:
+                return {
+                    "eye": eye,
+                    "center": {"x": center[0], "y": center[1], "z": center[2]},
+                    "up": up,
+                    "projection": {"type": projection},
+                }
+
+            for center in ((0.4, 0.0, 0.0), (0.6, 0.0, 0.0)):
+                result = _persist(backend, scene_id, camera_at(center))
+                assert result is not None
+                assert result["refit"] is False
+                assert result["view_update"] is None
+                state = backend.get_state(scene_id)
+                assert state["camera"]["center"]["x"] == center[0]
+                assert state["camera"]["projection"]["type"] == projection
+                assert int(state["camera_revision"]) == int(before["camera_revision"])
+                assert _shows_atoms(backend, scene_id)
+
+            dotted_keep = _persist_relayout_camera(
+                backend,
+                {
+                    "scene_id": scene_id,
+                    "scene_generation": before["scene_generation"],
+                    "camera_revision": before["camera_revision"],
+                    "relayout": {"scene.camera.center": {"x": 1.0, "y": 0.0, "z": 0.0}},
+                },
+                _camera_store_payload(scene_id, before.get("camera")),
+                now=10.0,
+                last_commit=0.0,
+                min_interval_s=0.25,
+            )
+            assert dotted_keep is not None
+            assert dotted_keep["refit"] is False
+            assert backend.get_state(scene_id)["camera"]["center"]["x"] == 1.0
+            assert _shows_atoms(backend, scene_id)
+
+            missed = _persist(backend, scene_id, camera_at((20.0, 20.0, 20.0)))
+            assert missed is not None
+            assert missed["refit"] is True
+            assert missed["view_update"]["payload"]["command"] == "refit"
+            fitted = backend.get_state(scene_id)
+            assert fitted["camera"]["center"]["x"] != 20.0
+            assert fitted["camera"]["projection"]["type"] == projection
+            assert int(fitted["camera_revision"]) == int(before["camera_revision"]) + 1
+            assert _shows_atoms(backend, scene_id)
+
+            dotted_miss = _persist_relayout_camera(
+                backend,
+                {
+                    "scene_id": scene_id,
+                    "scene_generation": fitted["scene_generation"],
+                    "camera_revision": fitted["camera_revision"],
+                    "relayout": {"scene.camera.center": {"x": 20.0, "y": 20.0, "z": 20.0}},
+                },
+                _camera_store_payload(scene_id, fitted.get("camera")),
+                now=20.0,
+                last_commit=0.0,
+                min_interval_s=0.25,
+            )
+            assert dotted_miss is not None
+            assert dotted_miss["refit"] is True
+            assert dotted_miss["view_update"]["payload"]["command"] == "refit"
+            after_dotted = backend.get_state(scene_id)
+            assert after_dotted["camera"]["center"]["x"] != 20.0
+            assert after_dotted["camera"]["projection"]["type"] == projection
+            assert _shows_atoms(backend, scene_id)
+
+            stale = _persist_relayout_camera(
+                backend,
+                {
+                    "scene_id": scene_id,
+                    "scene_generation": after_dotted["scene_generation"],
+                    "camera_revision": int(after_dotted["camera_revision"]) - 1,
+                    "relayout": {"scene.camera": camera_at((0.6, 0.0, 0.0))},
+                },
+                _camera_store_payload(scene_id, after_dotted.get("camera")),
+                now=30.0,
+                last_commit=0.0,
+                min_interval_s=0.25,
+            )
+            assert stale is not None
+            assert stale["repaint"] is True
+            assert stale["refit"] is False
+            assert stale["view_update"] is None
+            untouched = backend.get_state(scene_id)
+            assert untouched["camera"]["center"] == after_dotted["camera"]["center"]
+            assert int(untouched["camera_revision"]) == int(after_dotted["camera_revision"])
+
+        other = backend.create_scene(structure="ionic_nacl", label="other")
+        other_id = other["id"]
+        assert other_id != scene_id
+        assert backend.active_scene_id() == other_id
+        owned = backend.get_state(scene_id)
+        other_before = backend.get_state(other_id).get("camera")
+        parked = {
+            "eye": owned["camera"]["eye"],
+            "center": {"x": 0.6, "y": 0.0, "z": 0.0},
+            "up": owned["camera"]["up"],
+            "projection": {"type": owned["camera"]["projection"]["type"]},
+        }
+        cross = _persist(backend, scene_id, parked)
+        assert cross is not None
+        assert cross["scene_id"] == scene_id
+        assert backend.get_state(scene_id)["camera"]["center"]["x"] == 0.6
+        assert backend.active_scene_id() == other_id
+        assert backend.get_state(other_id).get("camera") == other_before
+    finally:
+        backend.close()
+
+
 def test_figure_stamps_a_framing_camera_without_rewriting_state(tmp_path: Path):
     backend = _backend(tmp_path)
     try:

@@ -220,10 +220,9 @@ def test_fit_frames_cubic_elongated_triclinic_and_molecule(tmp_path: Path):
                                 boundary=True,
                             )
         finally:
-            # Join the render pools. wait=False detaches live workers from
-            # CPython's private shutdown registries while this process keeps
-            # running, and the xdist worker died on that path with no
-            # traceback.
+            # Join the pools on the way out. The 3.12 worker death on this
+            # test had no traceback, so this join is cleanup, not a
+            # demonstrated fix for that death.
             backend.close(wait=True)
 
 

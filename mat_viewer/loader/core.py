@@ -157,7 +157,11 @@ def build_empty_bundle(
             "up": [0.0, 1.0, 0.0],
         },
         "style": {},
-        "show_hydrogen": True,
+        # Empty shell only. A show-hydrogen request must miss this entry and
+        # rebuild through the scene builder, which attaches the transform
+        # contract. Keying this stub as visible hydrogen makes that request
+        # reuse a scene with no SiteRecord payload.
+        "show_hydrogen": False,
         "has_minor": False,
         "preset_entry": {},
         "display_mode": "formula_unit",
@@ -181,7 +185,7 @@ def build_empty_bundle(
         scene_cache={
             scene_cache_key(
                 display_mode="formula_unit",
-                show_hydrogen=True,
+                show_hydrogen=False,
             ): scene
         },
         fragment_table=[],
@@ -189,7 +193,7 @@ def build_empty_bundle(
         fragment_table_cache={
             fragment_table_cache_key(
                 display_mode="formula_unit",
-                show_hydrogen=True,
+                show_hydrogen=False,
             ): ([], [])
         },
         atom_fragment_labels=[],

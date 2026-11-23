@@ -179,6 +179,97 @@ def test_fresh_scenes_check_hydrogens_and_an_explicit_hide_removes_them(tmp_path
         backend.close()
 
 
+def test_entry_flag_and_style_flag_share_one_fresh_scene_precedence(tmp_path):
+    path = _write(tmp_path, "probe.cif", _WATER)
+    cases = {
+        "entry-only": ({"show_hydrogen": False}, ["O"], False),
+        "style-only": ({"style": {"show_hydrogen": False}}, ["O"], False),
+        "entry-hides-over-style": (
+            {"show_hydrogen": False, "style": {"show_hydrogen": True}},
+            ["O"],
+            False,
+        ),
+        "entry-shows-over-style": (
+            {"show_hydrogen": True, "style": {"show_hydrogen": False}},
+            ["H", "H", "O"],
+            True,
+        ),
+    }
+    for name, (entry, drawn, checked) in cases.items():
+        preset = default_preset()
+        preset["structures"]["probe"] = entry
+        bundle = build_loaded_crystal(
+            name="probe",
+            title="Probe",
+            cif_path=str(path),
+            preset=preset,
+            source="upload",
+        )
+        assert sorted(atom["elem"] for atom in bundle.raw_atoms) == ["H", "H", "O"]
+        assert _elements(bundle.scene) == drawn, name
+        preset_path = tmp_path / f"{name}.json"
+        preset_path.write_text(json.dumps(preset), encoding="utf-8")
+        backend = ViewerBackend(preset_path=str(preset_path), root_dir=str(tmp_path))
+        backend._render_worker.request_figure_build = lambda *args, **kwargs: False
+        backend.bundles[bundle.name] = bundle
+        if bundle.name not in backend.structure_names:
+            backend.structure_names.append(bundle.name)
+        try:
+            state = backend.default_state(bundle.name)
+            assert ("hydrogens" in state["display_options"]) is checked, name
+            scene = backend.scene_for_state(state)
+            assert _elements(scene) == drawn, name
+            assert len(scene["_canonical_source_atoms"]) == 3, name
+        finally:
+            backend.close()
+
+
+def test_saved_hide_restores_and_a_session_hide_stays_hidden(tmp_path):
+    path = _write(tmp_path, "probe.cif", _WATER)
+    bundle = build_loaded_crystal(
+        name="probe",
+        title="Probe",
+        cif_path=str(path),
+        preset=default_preset(),
+        source="upload",
+    )
+    backend = _backend(tmp_path, bundle)
+    try:
+        state = backend.default_state(bundle.name)
+        assert "hydrogens" in state["display_options"]
+        backend.create_scene(structure=bundle.name)
+        scene_id = backend.current_state["scene_id"]
+        hidden_options = [
+            option
+            for option in backend.current_state["display_options"]
+            if option != "hydrogens"
+        ]
+        hidden_state = backend.patch_state(
+            {"display_options": hidden_options},
+            scene_id=scene_id,
+        )
+        assert "hydrogens" not in hidden_state["display_options"]
+        assert _elements(backend.scene_for_state(hidden_state)) == ["O"]
+        backend.save_preset()
+    finally:
+        backend.close()
+    restored = ViewerBackend(
+        preset_path=str(tmp_path / "preset.json"),
+        root_dir=str(tmp_path),
+    )
+    restored._render_worker.request_figure_build = lambda *args, **kwargs: False
+    restored.bundles[bundle.name] = bundle
+    if bundle.name not in restored.structure_names:
+        restored.structure_names.append(bundle.name)
+    try:
+        fresh = restored.default_state(bundle.name)
+        assert "hydrogens" not in fresh["display_options"]
+        assert _elements(restored.scene_for_state(fresh)) == ["O"]
+        assert len(restored.scene_for_state(fresh)["_canonical_source_atoms"]) == 3
+    finally:
+        restored.close()
+
+
 def test_style_override_hides_hydrogens_without_removing_source_atoms(tmp_path):
     path = _write(tmp_path, "probe.cif", _WATER)
     preset = default_preset()

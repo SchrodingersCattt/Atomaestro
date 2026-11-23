@@ -204,9 +204,12 @@ limit of the decomposition, not an element rule. Honours `display_mode`:
 Both `mat_viewer.scene.build_scene_from_atoms` and `build_scene_from_cif`
 accept `show_hydrogen: bool | None = None`. Explicit `False` hides hydrogen
 atoms and their incident bonds even when the preset enables them; explicit
-`True` shows them. Omission or `None` resolves the structure entry's
-`show_hydrogen` first, then the merged global/structure style. When neither
-sets the key, hydrogen atoms already present in the input are shown. The
+`True` shows them. Omission or `None` resolves the structure entry's top-level
+`show_hydrogen` first. That key wins over a conflicting
+`structures.<name>.style.show_hydrogen`. The merged global and structure
+style is used only when the entry omits the key. A fresh Dash scene uses
+the same order for the Hydrogens checkbox. When neither sets the key,
+hydrogen atoms already present in the input are shown. The
 effective boolean is recorded in both `scene["show_hydrogen"]` and
 `scene["style"]["show_hydrogen"]`; the supplied preset is not mutated.
 This is a display filter, not a change to source atoms or connectivity, and

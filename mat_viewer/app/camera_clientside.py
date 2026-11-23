@@ -138,6 +138,22 @@ def register_camera_clientside(app) -> None:
           if (!livePointer && !liveWheel && !followUp) {
             note(gestureKind === "wheel" ? "wheel-other-scene" :
               (ownsCanvas && endedAt ? "follow-up-expired" : "no-gesture"));
+            // A full camera that arrives after the pointer name is released
+            // is not a drag, so it is not stored. Plotly has already moved
+            // the WebGL eye. Paint the camera the server already accepted
+            // when that pose leaves the structure. A dotted frame eye is
+            // left alone, and a center inside the fit tolerance is too.
+            var repairCenter = wholeCamera && wholeCamera.center;
+            if (repairCenter && canvasId &&
+                typeof window.__mvApplyServerCamera === "function") {
+              var rx = Number(repairCenter.x !== undefined ? repairCenter.x : repairCenter[0]);
+              var ry = Number(repairCenter.y !== undefined ? repairCenter.y : repairCenter[1]);
+              var rz = Number(repairCenter.z !== undefined ? repairCenter.z : repairCenter[2]);
+              var far = [rx, ry, rz].every(Number.isFinite) && Math.hypot(rx, ry, rz) >= 0.5;
+              if (far) {
+                window.__mvApplyServerCamera(canvasId);
+              }
+            }
             return window.dash_clientside.no_update;
           }
           note(liveWheel ? "wheel" : (livePointer ? "live-pointer" : "pointer-follow-up"));

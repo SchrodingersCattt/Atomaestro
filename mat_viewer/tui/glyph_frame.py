@@ -4,9 +4,11 @@ Atom and molecule views share this grid so a person or an agent can recover whic
 where. Each cell keeps the closest depth written into it; a farther atom
 or bond is not drawn there.
 
-Hydrogen and periodic boundary replicas are omitted unless the caller asks
-for them. Labels longer than ``MAX_CANVAS_LABEL_COLUMNS`` are not stamped
-on the picture; the selection inspector already carries the full label.
+Existing hydrogen is drawn when ``show_hydrogen`` is true. The terminal
+controller defaults that flag on. Periodic boundary replicas stay omitted
+unless ``show_boundary`` is true. Labels longer than
+``MAX_CANVAS_LABEL_COLUMNS`` are not stamped on the picture; the
+selection inspector already carries the full label.
 """
 
 from __future__ import annotations

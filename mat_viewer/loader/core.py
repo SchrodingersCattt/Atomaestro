@@ -157,6 +157,10 @@ def build_empty_bundle(
             "up": [0.0, 1.0, 0.0],
         },
         "style": {},
+        # Empty shell only. A show-hydrogen request must miss this entry and
+        # rebuild through the scene builder, which attaches the transform
+        # contract. Keying this stub as visible hydrogen makes that request
+        # reuse a scene with no SiteRecord payload.
         "show_hydrogen": False,
         "has_minor": False,
         "preset_entry": {},
@@ -557,7 +561,7 @@ def build_bundle_scene(
     bundle: LoadedCrystal,
     *,
     display_mode: str = "formula_unit",
-    show_hydrogen: bool = False,
+    show_hydrogen: bool = True,
     preset: Optional[Dict[str, Any]] = None,
     transforms: Optional[list[Dict[str, Any]]] = None,
     include_boundary_replicas: bool = True,

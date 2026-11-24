@@ -27,7 +27,13 @@ from ..style.disorder import (
 from ..structure.formula_unit import select_formula_unit
 from ..structure.geometry import _nearest_pbc_cart, view_rotation
 from ..style.palette import atom_r, elem_color, elem_color_light
-from ..presets import DEFAULT_STYLE, deep_merge, default_preset, json_safe  # noqa: F401
+from ..presets import (  # noqa: F401
+    DEFAULT_STYLE,
+    deep_merge,
+    default_preset,
+    json_safe,
+    resolved_show_hydrogen,
+)
 from ..viewpoint import auto_view_dir
 from ..legacy.plot_crystal import _compute_label_positions
 
@@ -118,11 +124,7 @@ def build_scene_from_atoms(
     style = deep_merge(DEFAULT_STYLE, preset.get("style"))
     entry = preset.get("structures", {}).get(name, {})
     style = deep_merge(style, entry.get("style"))
-    show_h = (
-        bool(entry.get("show_hydrogen", style.get("show_hydrogen", False)))
-        if show_hydrogen is None
-        else bool(show_hydrogen)
-    )
+    show_h = resolved_show_hydrogen(entry, style, show_hydrogen)
     style["show_hydrogen"] = show_h
 
     input_atoms = [dict(atom) for atom in atoms]

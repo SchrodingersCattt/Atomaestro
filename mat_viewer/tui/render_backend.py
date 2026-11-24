@@ -574,7 +574,7 @@ def render_picture(
     show_bonds: bool = True,
     show_cell: bool = True,
     show_minor: bool = True,
-    show_hydrogen: bool = False,
+    show_hydrogen: bool = True,
     show_boundary: bool = False,
     zoom: float = 1.0,
     pan_x: float = 0.0,

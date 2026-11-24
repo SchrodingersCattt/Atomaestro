@@ -165,12 +165,10 @@ DEFAULT_STRUCTURE_PRESETS = {
     "DAP-4": {
         "view_direction": [1.0, 0.0, 0.0],
         "up": [0.0, 0.0, 1.0],
-        "show_hydrogen": False,
     },
     "SY": {
         "view_direction": [1.0, 1.0, 1.0],
         "up": [0.0, 0.0, 1.0],
-        "show_hydrogen": False,
     },
 }
 
@@ -298,10 +296,32 @@ def scene_from_camera(position: Iterable[float], focal_point: Iterable[float], u
     return view_dir, up
 
 
+def resolved_show_hydrogen(
+    entry: Optional[Dict[str, Any]],
+    style: Optional[Dict[str, Any]],
+    override: bool | None = None,
+) -> bool:
+    """Whether existing hydrogen atoms are drawn.
+
+    An explicit override wins. A structure entry's top-level
+    ``show_hydrogen`` then wins over every style key, including a
+    conflicting ``entry["style"]["show_hydrogen"]``. The merged style is
+    used only when the entry omits the key. A missing key shows hydrogen
+    atoms already present in the input. This does not add atoms.
+    """
+    if override is not None:
+        return bool(override)
+    if isinstance(entry, dict) and "show_hydrogen" in entry:
+        return bool(entry["show_hydrogen"])
+    if isinstance(style, dict) and "show_hydrogen" in style:
+        return bool(style["show_hydrogen"])
+    return True
+
+
 def scene_to_preset_entry(scene: Dict[str, Any], camera=None, style=None) -> Dict[str, Any]:
     entry = {
         "camera": _json_safe(camera or scene.get("camera", {})),
-        "show_hydrogen": bool(scene.get("show_hydrogen", False)),
+        "show_hydrogen": bool(scene.get("show_hydrogen", True)),
     }
     if style:
         entry["style"] = _json_safe(style)

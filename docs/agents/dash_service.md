@@ -324,8 +324,10 @@ Notes for callers:
   `ball`, `ball_stick`, `stick`, `ortep`, and `wireframe` styles. `disorder` is `opacity`, `dashed_bonds`,
   `outline_rings`, `color_shift`, or `none`. Fresh scenes default to
   occupancy-based disorder opacity (`disorder="opacity"`, `minor_opacity=0.35`),
-  hydrogens + unit-cell box visible, labels hidden, and
-  `label_mode="unique_sites"`.
+  hydrogens already present in the input + unit-cell box visible, labels hidden, and
+  `label_mode="unique_sites"`. A structure entry's top-level `show_hydrogen`
+  starts that checkbox and wins over a conflicting style value. Style is
+  used only when the entry omits the key.
 
   Legacy aliases that still work: `topology_fragment_type` (`"A"` /
   `"B"` / `"X"`) is translated to the matching list of species keys

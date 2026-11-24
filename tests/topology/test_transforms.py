@@ -575,7 +575,7 @@ def test_build_bundle_scene_preserves_transform_fragment_table(monkeypatch):
         M=M,
         view_direction=[0.0, 0.0, 1.0],
         up=[0.0, 1.0, 0.0],
-        scene_cache={("unit_cell", False, False, None, ()): base_scene},
+        scene_cache={("unit_cell", True, False, None, ()): base_scene},
         molcrys_analysis=object(),
     )
 

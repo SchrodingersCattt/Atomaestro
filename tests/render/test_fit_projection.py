@@ -220,7 +220,10 @@ def test_fit_frames_cubic_elongated_triclinic_and_molecule(tmp_path: Path):
                                 boundary=True,
                             )
         finally:
-            backend.close(wait=False)
+            # Join the pools on the way out. The 3.12 worker death on this
+            # test had no traceback, so this join is cleanup, not a
+            # demonstrated fix for that death.
+            backend.close(wait=True)
 
 
 def _extreme_cif(path: Path, length: float) -> None:

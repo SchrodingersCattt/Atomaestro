@@ -802,7 +802,7 @@ def ortep_octant_hatch_traces(scene: dict, style: dict):
             bool(style.get("ortep_octant_hatching", False)),
         ):
             continue
-        if _atom_element(atom) == "H" and not bool(style.get("show_hydrogen", False)):
+        if _atom_element(atom) == "H" and not bool(style.get("show_hydrogen", True)):
             continue
 
         bucket_key = "minor" if (_atom_is_minor(atom) and fade_minor) else "major"
@@ -974,7 +974,7 @@ def ortep_atom_fill_traces(scene: dict, style: dict):
             continue
         if not _atom_render_visible(atom):
             continue
-        if _atom_element(atom) == "H" and not bool(style.get("show_hydrogen", False)):
+        if _atom_element(atom) == "H" and not bool(style.get("show_hydrogen", True)):
             continue
         if _minor_axes_outline_only(atom, style):
             continue
@@ -1083,7 +1083,7 @@ def ortep_silhouette_outline_traces(scene: dict, style: dict):
             continue
         if not _atom_render_visible(atom):
             continue
-        if _atom_element(atom) == "H" and not bool(style.get("show_hydrogen", False)):
+        if _atom_element(atom) == "H" and not bool(style.get("show_hydrogen", True)):
             continue
         if _minor_axes_outline_only(atom, style):
             continue

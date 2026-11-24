@@ -99,6 +99,7 @@ def register_camera_clientside(app) -> None:
           // wheel exception, so a late relayout cannot move onto the next
           // canvas.
           if (!gestureId && lastGestureId && canvasId && lastGestureId !== canvasId && gestureKind !== "wheel") {
+            note("cross-scene");
             return window.dash_clientside.no_update;
           }
           // A geometry frame emits its camera relayout after the depth
@@ -136,9 +137,44 @@ def register_camera_clientside(app) -> None:
           var age = endedAt ? (Date.now() - endedAt) : 0;
           var followUp = ownsCanvas && gestureKind === "pointer" && !!endedAt && age <= 1000;
           if (!livePointer && !liveWheel && !followUp) {
-            note(gestureKind === "wheel" ? "wheel-other-scene" :
-              (ownsCanvas && endedAt ? "follow-up-expired" : "no-gesture"));
-            return window.dash_clientside.no_update;
+            if (gestureKind === "wheel") {
+              note("wheel-other-scene");
+              return window.dash_clientside.no_update;
+            }
+            // The pointer that owned this canvas has ended. Forward the
+            // pose, full or dotted, with the clocks on the mounted figure.
+            // The gesture-start revision is stale, and painting the previous
+            // camera would discard a pan the server has not judged. The
+            // server keeps a pose that still shows the structure and refits
+            // one that does not. A relayout with no pointer on this canvas
+            // is a frame and is not stored. Missing mounted clocks fail
+            // closed instead of reusing the gesture revision.
+            var namedHere = !!(gestureId && canvasId && gestureId === canvasId);
+            var releasedHere = !gestureId && !!(lastGestureId && canvasId && lastGestureId === canvasId);
+            if (!namedHere && !releasedHere) {
+              note(ownsCanvas && endedAt ? "follow-up-expired" : "no-gesture");
+              return window.dash_clientside.no_update;
+            }
+            var liveGeneration = meta ? meta.scene_generation : undefined;
+            var liveRevision = null;
+            if (meta && meta.camera_revision !== undefined && meta.camera_revision !== null && meta.camera_revision !== "") {
+              liveRevision = Number(meta.camera_revision);
+            } else if (meta && meta.camera_version !== undefined && meta.camera_version !== null && meta.camera_version !== "") {
+              liveRevision = Number(meta.camera_version);
+            }
+            var generationMissing = liveGeneration === undefined || liveGeneration === null || liveGeneration === "";
+            if (generationMissing || liveRevision === null || !Number.isFinite(liveRevision)) {
+              note(namedHere && endedAt ? "follow-up-expired" : "no-gesture");
+              return window.dash_clientside.no_update;
+            }
+            note("settled-pose");
+            return {
+              scene_id: canvasId,
+              scene_generation: liveGeneration,
+              camera_revision: liveRevision,
+              relayout: relayout,
+              seq: Date.now(),
+            };
           }
           note(liveWheel ? "wheel" : (livePointer ? "live-pointer" : "pointer-follow-up"));
           var sceneId = gestureId || canvasId;

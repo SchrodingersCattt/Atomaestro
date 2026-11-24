@@ -109,7 +109,7 @@ class TerminalViewController(DepthControls):
         show_cell: bool = True,
         label_mode: str = "auto",
         show_minor: bool = False,
-        show_hydrogen: bool = False,
+        show_hydrogen: bool = True,
         show_boundary: bool = False,
         display_level: str = "auto",
         show_axes: bool = True,

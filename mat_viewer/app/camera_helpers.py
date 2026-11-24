@@ -310,7 +310,7 @@ def _display_options_from_style(style: dict) -> list[str]:
             (style.get("show_axes", True), "axes"),
             (style.get("show_minor_only", False), "minor_only"),
             (style.get("minor_wireframe", False), "minor_wireframe"),
-            (style.get("show_hydrogen", False), "hydrogens"),
+            (style.get("show_hydrogen", True), "hydrogens"),
             (style.get("show_unit_cell", False), "unit_cell_box"),
             (style.get("monochrome", False), "monochrome"),
         )

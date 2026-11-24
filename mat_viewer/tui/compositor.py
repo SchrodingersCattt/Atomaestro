@@ -230,7 +230,7 @@ def compose_frame(
     show_bonds: bool = True,
     show_cell: bool = True,
     show_minor: bool = True,
-    show_hydrogen: bool = False,
+    show_hydrogen: bool = True,
     show_boundary: bool = False,
     zoom: float = 1.0,
     pan_x: float = 0.0,
@@ -255,8 +255,10 @@ def compose_frame(
     show_axes : bool
         Reserve the bottom row for a lattice-axis triad and a scale bar.
     show_hydrogen, show_boundary : bool
-        Atom-level drawing omits hydrogen and periodic boundary replicas
-        unless these are set. Molecule overviews keep the braille picture.
+        Atom-level drawing includes existing hydrogen when
+        ``show_hydrogen`` is true. The controller default is true.
+        Periodic boundary replicas stay omitted unless ``show_boundary``
+        is true. Molecule overviews keep the braille picture.
     """
     if width is None or height is None:
         try:

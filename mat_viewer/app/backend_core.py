@@ -5,6 +5,7 @@ import atexit
 
 from ..cache_keys import figure_state_cache_key
 from ..config import current_config
+from ..presets import resolved_show_hydrogen
 from ..render.retention import (
     FIGURE_CACHE_MAX_ENTRIES as FIGURE_CACHE_MAX,
     BudgetedCache,
@@ -202,6 +203,14 @@ class _CoreBackendMixin:
         )
         style.update(preset_style)
         style.update(entry_style)
+        structure_entry = (
+            effective_preset.get("structures", {}).get(structure, {}) or {}
+        )
+        # The scene builder reads a structure entry's top-level flag before
+        # style. A hand-edited or previously saved entry that only sets that
+        # flag has to start the checkbox the same way. A conflicting style
+        # key does not override it.
+        style["show_hydrogen"] = resolved_show_hydrogen(structure_entry, style)
         # Presets persist exact target paint edits alongside ordinary style
         # controls.  Promote that mapping into state defaults so callers that
         # load a preset without a v2 scene list retain geometry/atom/bond

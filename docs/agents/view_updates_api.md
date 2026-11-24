@@ -139,7 +139,13 @@ a projection change is not a pose. A relayout is stored for a live
 pointer, a wheel whose gesture names the mounted scene, or a pointer
 follow-up that still names that scene and is inside the 1000ms release
 after pointerup or pointercancel. That follow-up can be more than one
-pose. The offscreen drag is one of them. A pointer release that does not
+pose. The offscreen drag is one of them. After that release, a full or
+dotted pose that still belongs to this canvas is forwarded with the
+mounted figure's generation and camera revision. The gesture-start
+revision is not reused. A pose with no pointer on this canvas, or with
+no mounted clocks, is not stored, and the client does not paint the
+previous camera over it. The server keeps a pose that still shows the
+structure and replaces one that does not. A pointer release that does not
 emit a camera relayout paints the camera the store already accepted, so
 a pan that ends outside the plot cannot leave the WebGL eye offscreen
 after the server has refit. An inside-plot release commits on canvas

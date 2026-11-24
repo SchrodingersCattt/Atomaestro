@@ -12,7 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from mat_viewer.capabilities import MOLCRYSKIT_DEVELOPMENT_REQUIREMENT
+from mat_viewer.capabilities import MOLCRYSKIT_REQUIREMENT
+
+DIRECT_REFERENCE = "molcrys-kit[desktop] @ https://example.invalid/molcrys_kit.whl"
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / ".github" / "scripts" / "reject_direct_dependencies.py"
@@ -31,26 +33,26 @@ def test_version_requirement_is_uploadable_and_direct_url_is_not() -> None:
     allowed = checker.direct_reference_requirements(
         "Metadata-Version: 2.1\n"
         "Name: atomaestro\n"
-        'Requires-Dist: molcrys-kit>=0.8.0,<0.9.0\n'
+        'Requires-Dist: molcrys-kit[desktop]>=0.9.0,<0.10.0\n'
         "Requires-Dist: numpy\n"
     )
     blocked = checker.direct_reference_requirements(
         "Metadata-Version: 2.1\n"
         "Name: atomaestro\n"
-        f"Requires-Dist: {MOLCRYSKIT_DEVELOPMENT_REQUIREMENT}\n"
+        f"Requires-Dist: {DIRECT_REFERENCE}\n"
     )
     assert allowed == []
-    assert blocked == [MOLCRYSKIT_DEVELOPMENT_REQUIREMENT]
+    assert blocked == [DIRECT_REFERENCE]
     omitted = checker.requires_dist_values(
         "Metadata-Version: 2.1\nName: atomaestro\nRequires-Python: >=3.10\n"
     )
     requires_txt = checker.requires_txt_as_metadata(
-        f"{MOLCRYSKIT_DEVELOPMENT_REQUIREMENT.replace(' @ ', '@ ')}\n"
+        f"{DIRECT_REFERENCE.replace(' @ ', '@ ')}\n"
         "numpy\n\n[tui]\ntextual\n"
     )
     assert omitted == []
     assert checker.direct_reference_requirements(requires_txt) == [
-        MOLCRYSKIT_DEVELOPMENT_REQUIREMENT.replace(" @ ", "@ ")
+        DIRECT_REFERENCE.replace(" @ ", "@ ")
     ]
     assert checker.is_release_tag("v0.0.6")
     assert not checker.is_release_tag("v")
@@ -60,11 +62,10 @@ def test_version_requirement_is_uploadable_and_direct_url_is_not() -> None:
     assert not checker.is_release_tag("v1.2.3-rc1")
 
 
-def test_current_molcrys_pin_stays_and_would_be_rejected_on_upload() -> None:
+def test_current_molcrys_requirement_is_a_public_release_range() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert MOLCRYSKIT_DEVELOPMENT_REQUIREMENT in pyproject
-    assert "2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6" in pyproject
-    assert "molcrys-kit==0.8.0" not in pyproject
+    assert f'"{MOLCRYSKIT_REQUIREMENT}"' in pyproject
+    assert "git+https://github.com/SchrodingersCattt/MolCrysKit" not in pyproject
 
 
 def test_release_jobs_reject_direct_references_and_non_final_tags() -> None:
@@ -145,29 +146,26 @@ def _isolated_project_artifacts(tmp_path: Path) -> list[Path]:
 
 
 @pytest.mark.timeout(180)
-def test_upload_guard_rejects_built_wheel_and_accepts_legal_metadata(
+def test_upload_guard_accepts_built_wheel_and_sdist(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """The current wheel is rejected. A normal Requires-Dist wheel is not.
+    """The real release artifacts both pass the same guard used to publish."""
+    from packaging.requirements import Requirement
 
-    This expectation stays green while the release is blocked. It fails when
-    the built metadata no longer contains the direct MolCrysKit URL, which is
-    the signal to update the release block rather than a publish step.
-    """
     checker = _checker()
     artifacts = _isolated_project_artifacts(tmp_path)
+    assert any(path.name.endswith(".tar.gz") for path in artifacts)
     wheel = next(path for path in artifacts if path.suffix == ".whl")
     label, metadata = checker.artifact_texts(wheel)[0]
     assert label == "METADATA"
-    assert MOLCRYSKIT_DEVELOPMENT_REQUIREMENT in checker.requires_dist_values(metadata)
-
-    blocked = checker.main(["--tag", "v9.9.9", *[str(path) for path in artifacts]])
-    captured = capsys.readouterr()
-    assert blocked == 1
-    assert MOLCRYSKIT_DEVELOPMENT_REQUIREMENT in captured.err
-    assert "METADATA uses a direct reference" in captured.err
-    sdist = next(path for path in artifacts if path.name.endswith(".tar.gz"))
-    assert sdist.name in captured.err
+    requirements = [Requirement(value) for value in checker.requires_dist_values(metadata)]
+    assert Requirement(MOLCRYSKIT_REQUIREMENT) in requirements
+    assert all(req.url is None for req in requirements)
+    status = checker.main(
+        ["--project", "atomaestro", "--tag", "v9.9.9", *map(str, artifacts)]
+    )
+    assert status == 0
+    assert not capsys.readouterr().err
 
     legal = tmp_path / "legal.whl"
     _write_wheel(
@@ -175,7 +173,7 @@ def test_upload_guard_rejects_built_wheel_and_accepts_legal_metadata(
         "Metadata-Version: 2.1\n"
         "Name: atomaestro\n"
         "Version: 9.9.9\n"
-        "Requires-Dist: molcrys-kit>=0.8.0,<0.9.0\n"
+        "Requires-Dist: molcrys-kit[desktop]>=0.9.0,<0.10.0\n"
         "Requires-Dist: numpy\n",
     )
     assert checker.main(["--tag", "v9.9.9", str(legal)]) == 0

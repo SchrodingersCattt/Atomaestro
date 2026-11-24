@@ -10,9 +10,8 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 CI
 
 from mat_viewer.capabilities import (
     CAPABILITY_REGISTRY,
-    MOLCRYSKIT_DEVELOPMENT_REQUIREMENT,
+    MOLCRYSKIT_REQUIREMENT,
     MOLCRYSKIT_MINIMUM,
-    MOLCRYSKIT_SOURCE_COMMIT,
     MOLCRYSKIT_UPPER,
     install_command,
     resolve_requirements,
@@ -77,7 +76,7 @@ def test_skill_has_no_second_installer_or_obsolete_package_entrypoint() -> None:
     assert "python -m crystal_viewer" not in text
     assert "matplotlib-flat-ortep.md" not in text
     assert "apt-get install" not in text
-    assert '"molcrys-kit==0.8.0" "matter-vis==0.0.6"' in text
+    assert '"matter-vis==0.0.6"' not in text
 
 
 def test_skill_routes_publication_and_multi_structure_guidance() -> None:
@@ -168,9 +167,8 @@ def test_released_molcryskit_minimum_is_consistent() -> None:
         for dependency in data["project"]["dependencies"]
         if _dependency_name(dependency) == "molcrys-kit"
     )
-    assert molcryskit == MOLCRYSKIT_DEVELOPMENT_REQUIREMENT
-    assert MOLCRYSKIT_SOURCE_COMMIT in molcryskit
-    assert "git+" in molcryskit
+    assert molcryskit == MOLCRYSKIT_REQUIREMENT
+    assert "git+" not in molcryskit
 
     for workflow in ("ci.yml", "release.yml"):
         text = (ROOT / ".github" / "workflows" / workflow).read_text(encoding="utf-8")
@@ -190,5 +188,5 @@ def test_released_molcryskit_minimum_is_consistent() -> None:
     development = (SKILL / "references" / "capabilities-and-install.md").read_text(
         encoding="utf-8"
     )
-    assert MOLCRYSKIT_SOURCE_COMMIT in development
+    assert MOLCRYSKIT_REQUIREMENT in development
     assert "do not put a Git URL into generated runtime requirements" in development

@@ -121,12 +121,10 @@ applied when the shell is built, by forwarding `disorder_policy` to MolCrysKit
 `find_polyhedra` together with the source molecule index. The centre moiety
 is the Hill formula of each realization from MolCrysKit's public
 `disorder_realizations` API, so a fused displayed formula still finds a
-split orientation. Releases inside `molcrys-kit>=0.8.0,<0.9.0` that do not
-export that helper use the as-loaded molecule formula instead, which keeps
-ordered shells working, and that fallback is logged. Naming the fused
-as-refined formula under `major` or `exclusive` is not a fallback: that
-query matches no split orientation. An empty result is logged. Split
-orientations require the development pin.
+split orientation. If a local or incomplete MolCrysKit build does not export
+the helper, Atomaestro logs a fallback to the as-loaded formula, which keeps
+ordered shells working. Naming a fused as-refined formula under `major` or
+`exclusive` does not match a split orientation. An empty result is logged.
 `exclusive` draws one overlay for every orientation whose hull has simplices.
 
 `as_refined` uses that fused component. If it is not a drawable hull, the

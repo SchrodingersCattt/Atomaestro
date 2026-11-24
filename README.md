@@ -70,9 +70,11 @@ becomes:
 pip install atomaestro
 ```
 
-Do not install `matter-vis` and `atomaestro` into the same environment. Both
-full distributions own `mat_viewer` and the `mat-vis` script. No release
-version has been chosen.
+Do not install published `matter-vis` 0.0.6 and `atomaestro` into the same
+environment. That release owns `mat_viewer` and the `mat-vis` script. After
+`atomaestro` is published, uninstall `matter-vis` or use a new environment.
+`pip install -U matter-vis` is not the migration. No release version has been
+chosen.
 
 ### From source (development)
 

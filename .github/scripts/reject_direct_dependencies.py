@@ -4,6 +4,10 @@ PyPI returns HTTP 400 ``Can't have direct dependency`` for a Requires-Dist
 entry of the form ``name @ url``. That rule is PEP 440 for public indexes
 and is implemented in ``warehouse.forklift.metadata``. A wheel can build in
 CI and still be rejected at upload time.
+
+The script also rejects an artifact named ``matter-vis``. This repository
+does not publish that name. An upgrade from an installed ``matter-vis``
+deletes files written by ``atomaestro``.
 """
 
 from __future__ import annotations
@@ -31,6 +35,12 @@ def requires_dist_values(metadata_text: str) -> list[str]:
     return list(message.get_all("Requires-Dist") or [])
 
 
+def distribution_name(metadata_text: str) -> str:
+    """Return the canonical Name header, or an empty string when it is absent."""
+    message = email.message_from_string(metadata_text)
+    return (message.get("Name") or "").strip()
+
+
 def direct_reference_requirements(metadata_text: str) -> list[str]:
     """Return Requires-Dist values that carry a PEP 440 direct URL."""
     from packaging.requirements import Requirement
@@ -47,7 +57,7 @@ def requires_txt_as_metadata(text: str) -> str:
     lines = ["Metadata-Version: 2.1"]
     for raw in text.splitlines():
         line = raw.strip()
-        if not line or line.startswith("#") or line.startswith("["):
+        if not line or line.startswith(("#", "[")):
             continue
         lines.append(f"Requires-Dist: {line}")
     return "\n".join(lines) + "\n"
@@ -107,6 +117,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Release tag. When set, it must be a final vX.Y.Z tag.",
     )
     parser.add_argument(
+        "--project",
+        help=(
+            "Distribution name. The release workflow passes atomaestro. "
+            "An artifact named matter-vis is rejected even when this "
+            "option is omitted or matches that name."
+        ),
+    )
+    parser.add_argument(
         "artifacts",
         nargs="+",
         type=Path,
@@ -120,6 +138,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
     failed = False
+    saw_direct_reference = False
     for path in args.artifacts:
         try:
             bodies = artifact_texts(path)
@@ -131,6 +150,29 @@ def main(argv: list[str] | None = None) -> int:
             (text for label, text in bodies if label in {"METADATA", "PKG-INFO"}),
             "",
         )
+        from packaging.utils import canonicalize_name
+
+        actual = distribution_name(canonical)
+        try:
+            normalized = canonicalize_name(actual) if actual else ""
+        except ValueError:
+            normalized = ""
+        if normalized == "matter-vis":
+            failed = True
+            print(
+                f"{path} must not be published. Upgrading an installed "
+                "matter-vis deletes files atomaestro has written, including "
+                "mat_viewer and mat-vis. Install atomaestro in a new "
+                "environment, or uninstall matter-vis first.",
+                file=sys.stderr,
+            )
+        if args.project is not None and normalized != canonicalize_name(args.project):
+            failed = True
+            print(
+                f"{path} cannot be uploaded as {args.project}; "
+                f"its name is {actual or 'missing'}.",
+                file=sys.stderr,
+            )
         if not requires_dist_values(canonical):
             failed = True
             print(
@@ -143,6 +185,7 @@ def main(argv: list[str] | None = None) -> int:
             if not blocked:
                 continue
             failed = True
+            saw_direct_reference = True
             print(
                 f"{path} cannot be uploaded to PyPI; {label} uses a "
                 "direct reference:",
@@ -150,12 +193,13 @@ def main(argv: list[str] | None = None) -> int:
             )
             for value in blocked:
                 print(f"  {value}", file=sys.stderr)
-    if failed:
+    if saw_direct_reference:
         print(
             "PyPI rejects these dependencies. Replace them with a normal "
             "version requirement before publishing.",
             file=sys.stderr,
         )
+    if failed:
         return 1
     return 0
 

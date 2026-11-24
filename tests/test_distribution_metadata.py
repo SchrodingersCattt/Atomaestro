@@ -72,6 +72,7 @@ def test_release_jobs_reject_direct_references_and_non_final_tags() -> None:
         encoding="utf-8"
     )
     assert workflow.count("reject_direct_dependencies.py") == 3
+    assert workflow.count("--project atomaestro") == 3
     assert "startsWith(github.ref, 'refs/tags/v')" not in workflow
     assert workflow.count(
         "needs.release-checks.outputs.tag == github.ref_name"

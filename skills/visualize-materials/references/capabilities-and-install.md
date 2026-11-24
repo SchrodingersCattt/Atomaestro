@@ -6,17 +6,8 @@ authoritative; do not maintain a second dependency guess in an agent script.
 
 The command remains `mat-vis`. Python imports remain `mat_viewer`.
 
-Install the release that is on PyPI today. `atomaestro` is not published:
-
-```bash
-python -m pip install "molcrys-kit==0.8.0" "matter-vis==0.0.6"
-```
-
-The matrix below is the resolver output for this checkout's `atomaestro`
-distribution. Those commands are future installs. Do not run them until
-`atomaestro` is actually on PyPI. Do not install `matter-vis` and
-`atomaestro` into the same environment. Uninstall `matter-vis` first, or
-use a new environment.
+Install `atomaestro` from PyPI in a new environment or uninstall the
+legacy `matter-vis` package first. Do not install both packages together.
 
 ## Resolve on demand
 
@@ -83,20 +74,8 @@ switch backend or representation silently.
 
 ## Development checkout
 
-This checkout declares MolCrysKit in `pyproject.toml`. The pin is the
-`desktop` extra of commit `2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6`, the
-authorized pin. That commit includes Mercury commit `0702ed8d`, lightweight
-CIF commit `a4080132`, and the label bound that discards unselected
-structures. It is not MolCrysKit main and not tip `7b859dd`.
-Do not retarget the pin to tip 7b859dd. The constraint file repeats
-the same commit URL without the extra marker, because pip 26 rejects extras
-in a constraint. Core MolCrysKit is NumPy, NetworkX, and Click. The desktop
-extra supplies ASE, pymatgen, SciPy, spglib, and defusedxml; `read_mryx`
-imports defusedxml from that extra. The pin exposes `BondRecord.role`,
-`get_connectivity_report()`, `find_polyhedra(..., disorder_policy=...)`,
-case-insensitive lightweight CIF formula/Z metadata, and
-`molcrys_kit.io.read_mryx`.
-PyPI `0.8.0` does not. Install the checkout with `pip install -e .` and do
-not force `molcrys-kit==0.8.0` over that pin.
+The checkout requires `molcrys-kit[desktop]>=0.9.0,<0.10.0`.
+The desktop extra supplies ASE, pymatgen, SciPy, spglib, and defusedxml.
+Install the checkout with `pip install -e .`.
 Released users should follow the resolver's ordinary `atomaestro[...]` command;
 do not put a Git URL into generated runtime requirements.

@@ -17,11 +17,10 @@ Hill formula of each realization from MolCrysKit's public
 The displayed fragment formula selects the centre and is not used as that
 moiety string.
 
-Published ``molcrys-kit>=0.8.0,<0.9.0`` does not export
-``disorder_realizations``. That ``ImportError`` falls back to the as-loaded
-molecule formula, so ordered shells still render. Split orientations require
-the development pin. Other realization failures are logged and use the same
-fallback.
+An incomplete or local MolCrysKit build without
+``disorder_realizations`` falls back to the as-loaded molecule formula so
+ordered shells still render. Other realization failures are logged and use
+the same fallback.
 """
 
 from __future__ import annotations
@@ -86,12 +85,7 @@ def _accepts_disorder_policy(func: Any) -> bool:
 
 
 def _load_disorder_realizations():
-    """Return MolCrysKit's public realization helper, or ``None`` on 0.8.x.
-
-    The numeric requirement stays ``molcrys-kit>=0.8.0,<0.9.0``. Releases in
-    that window predate ``disorder_realizations``, so a missing export is the
-    compatibility path rather than a hard failure.
-    """
+    """Return the public realization helper, or ``None`` if missing."""
 
     global _missing_realization_api
     try:

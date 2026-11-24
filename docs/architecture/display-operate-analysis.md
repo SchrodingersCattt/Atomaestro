@@ -1,10 +1,9 @@
 # Display, Operate, and Analysis
 
 Baseline for this refactor: `4a5b4da53cda177e74e89d086792b68ed3771bdb`.
-MolCrysKit pin: `9bf0ffb0fb321d1084dbc444250b5f186af3c873`
-(`molcrys-kit>=0.8.0,<0.9.0` in the published range; the checkout uses
-that git commit because `BondRecord.role` and
-`get_connectivity_report()` are not in the PyPI 0.8.0 release).
+Historical MolCrysKit pin for this refactor: `9bf0ffb0fb321d1084dbc444250b5f186af3c873`.
+The released distribution uses the version range declared in `pyproject.toml`; the
+historical hash does not select the installed package.
 
 ## Effects
 

@@ -18,39 +18,20 @@ CAPABILITIES_SCHEMA = "mattervis.capabilities/v1"
 RESOLUTION_SCHEMA = "mattervis.requirements/v1"
 DIST_NAME = "atomaestro"
 GPU_INSTALL = 'python -m pip install "atomaestro[gpu]"'
-MOLCRYSKIT_MINIMUM = "0.8.0"
-# Exclusive upper bound of the numeric window CI still checks. The
-# development pin below is a git commit, not a pretend PyPI release:
-# PyPI 0.8.0 has neither BondRecord.role, get_connectivity_report, nor
-# disorder_realizations. Molecule-level shells fall back to the as-loaded
-# formula on that release instead of raising this floor.
-MOLCRYSKIT_UPPER = "0.9.0"
-MOLCRYSKIT_REQUIREMENT = f"molcrys-kit>={MOLCRYSKIT_MINIMUM},<{MOLCRYSKIT_UPPER}"
+MOLCRYSKIT_MINIMUM = "0.9.0"
+MOLCRYSKIT_UPPER = "0.10.0"
+MOLCRYSKIT_REQUIREMENT = (
+    f"molcrys-kit[desktop]>={MOLCRYSKIT_MINIMUM},<{MOLCRYSKIT_UPPER}"
+)
 MOLCRYSKIT_SOURCE_MINIMUM = MOLCRYSKIT_MINIMUM
-# Public resolver hint. Agents must not copy a git URL into generated
-# runtime requirements; released installs stay on this range once the
-# role/regime API is published.
 MOLCRYSKIT_INSTALL = f'python -m pip install "{MOLCRYSKIT_REQUIREMENT}"'
-# Development pin shared by Mercury import and the phone snapshot.
-# 2a3ee11 is the authorized pin, not MolCrysKit main and not tip
-# 7b859dd. It includes Mercury read_mryx 0702ed8d, lightweight CIF /
-# phone-site a4080132, and the label bound that discards unselected
-# structures. Do not retarget this URL to 7b859dd.
-# The desktop extra supplies ASE, pymatgen, SciPy, spglib, and defusedxml;
-# read_mryx imports defusedxml from that extra. pyproject.toml must name
-# this same requirement. The constraint file repeats the commit URL without
-# the extra marker because pip 26 rejects extras in constraints.
-# Restore a release range once those APIs are on PyPI.
+
+# Historical source provenance, not a package requirement. Keep the existing
+# exported names for callers of earlier capability helpers.
 MOLCRYSKIT_SOURCE_COMMIT = "2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6"
-MOLCRYSKIT_DEVELOPMENT_REQUIREMENT = (
-    "molcrys-kit[desktop] @ git+https://github.com/SchrodingersCattt/MolCrysKit.git@"
-    f"{MOLCRYSKIT_SOURCE_COMMIT}"
-)
-# Backward-compatible names retained for callers of the pre-0.7 helpers.
 MOLCRYSKIT_CONTRACT_SHA = "2a0ca454839f7fc8350ebe4b9ff5689b4b4ce335"
-MOLCRYSKIT_DEVELOPMENT_INSTALL = (
-    f'python -m pip install "{MOLCRYSKIT_DEVELOPMENT_REQUIREMENT}"'
-)
+MOLCRYSKIT_DEVELOPMENT_REQUIREMENT = MOLCRYSKIT_REQUIREMENT
+MOLCRYSKIT_DEVELOPMENT_INSTALL = MOLCRYSKIT_INSTALL
 
 _MOLCRYSKIT_RECORD_FIELDS: Mapping[str, tuple[str, ...]] = {
     "SiteRecord": (
@@ -306,11 +287,8 @@ CAPABILITY_REGISTRY: Mapping[str, CapabilitySpec] = {
         note=(
             "Requires BondRecord.role and "
             "MolecularCrystal.get_connectivity_report(). "
-            f"The published window is {MOLCRYSKIT_REQUIREMENT} once that "
-            "API is on PyPI. This checkout pins the desktop extra of the "
-            "commit in pyproject.toml. That extra supplies ASE, pymatgen, "
-            "SciPy, spglib, and defusedxml; core MolCrysKit does not. "
-            "PyPI 0.8.0 does not provide those fields."
+            f"Install {MOLCRYSKIT_REQUIREMENT}. The desktop extra supplies "
+            "ASE, pymatgen, SciPy, spglib, and defusedxml; core MolCrysKit does not."
         ),
     ),
     "gpu": CapabilitySpec(

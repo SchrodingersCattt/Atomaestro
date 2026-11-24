@@ -69,29 +69,15 @@ label and keep the per-tab close control in `scene-tab-close-row`.
 
 ## MolCrysKit
 
-Every install job uses the git commit in `pyproject.toml`:
+The distribution requires `molcrys-kit[desktop]>=0.9.0,<0.10.0`.
+CI pins `molcrys-kit==0.9.0` without extras in its constraint file:
+the install requirement supplies the `desktop` extra and pip constraints
+cannot request extras. The fast job checks the declared version window
+and probes the expected chemistry APIs, independently of the version.
 
-`2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6`
-
-That commit is the authorized pin. It includes Mercury `read_mryx`
-`0702ed8d`, lightweight CIF / phone-site `a4080132`, and the label
-bound that discards unselected structures. It is not MolCrysKit main
-and not tip `7b859dd`. Do not retarget the pin to that tip. Installing
-it before it is on MolCrysKit main is a readiness fact.
-
-The dependency requests the `desktop` extra. Core MolCrysKit is NumPy,
-NetworkX, and Click. The desktop extra supplies ASE, pymatgen, SciPy,
-spglib, and defusedxml. `read_mryx` imports defusedxml from that extra.
-`requirements/ci-constraints.txt` names the same commit URL without the
-`desktop` marker. Pip 26 rejects extras in a constraint file. A differing
-direct URL makes pip fail with a conflict, so change both together.
-
-The checkout version is derived from git tags by setuptools_scm. The fast-job window check
-still requires the installed version to be at least 0.8.0 and below
-0.9.0. The window is a check on the pin. It is not a PyPI minimum
-install. Job names say pinned molcrys-kit for that reason. PyPI
-0.8.0 does not provide the BondRecord and connectivity APIs this
-tree imports.
+The prior integration used commit `2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6`.
+That pin is historical provenance only. No VCS URL is needed to install
+the released package.
 
 Each job writes `ci-diagnostics/ci-environment.json` and
 `ci-freeze.txt`. The environment file includes the MolCrysKit version

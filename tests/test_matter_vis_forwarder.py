@@ -6,7 +6,7 @@ and that removal deletes the new files. The release check rejects the
 artifact. These wheels are built locally. The predecessor is synthetic
 and is not the public 0.0.6 release. Its file list is the public record's
 mat_viewer paths, with synthetic contents. ``--no-deps`` is used so these
-virtual environments do not fetch the MolCrysKit git pin. It is not the
+virtual environments do not fetch the full MolCrysKit desktop stack. It is not the
 supported user command.
 """
 

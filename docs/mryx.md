@@ -2,18 +2,10 @@
 
 Atomaestro imports `.mryx` using **MolCrysKit `read_mryx_atoms`**. The viewer has
 no Mercury XML parser, element-code table or chemistry decoder of its own. The
-required upstream revision is
-`2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6`, the authorized pin. It
-includes Mercury `read_mryx` `0702ed8d`, the lightweight CIF reader
-`a4080132`, and the label bound that discards unselected structures. It
-is not MolCrysKit main and not tip `7b859dd`. `pyproject.toml`
-requests the `desktop` extra of that commit. Core MolCrysKit is NumPy,
-NetworkX, and Click. The desktop extra supplies ASE, pymatgen, SciPy, spglib,
-and defusedxml, and `read_mryx` imports defusedxml from that extra.
-`requirements/ci-constraints.txt` repeats the same commit URL without the
-extra marker because pip 26 rejects extras in a constraint. Install that
-dependency rather than an older MolCrysKit release without this API. No CCDC
-installation is needed.
+distribution requires `molcrys-kit[desktop]>=0.9.0,<0.10.0`. The desktop
+extra supplies the parser dependency defusedxml; no CCDC installation is
+needed. The previous VCS pin `2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6` is
+recorded for provenance, not as an install requirement.
 
 ```bash
 mat-vis render document.mryx --frame 0 -o stored-sites.png --backend cpu

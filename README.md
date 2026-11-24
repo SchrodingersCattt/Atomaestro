@@ -2,10 +2,10 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)](#)
-[![PyPI](https://img.shields.io/pypi/v/matter-vis.svg)](https://pypi.org/project/matter-vis/)
+[![PyPI](https://img.shields.io/pypi/v/atomaestro.svg)](https://pypi.org/project/atomaestro/)
 [![CI](https://github.com/SchrodingersCattt/Atomaestro/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SchrodingersCattt/Atomaestro/actions/workflows/ci.yml)
 
-> **Package migration:** The GitHub project is **Atomaestro** (formerly MatterVis). The command stays `mat-vis`, and Python imports stay `mat_viewer`. Install the published release, [`matter-vis` 0.0.6](https://pypi.org/project/matter-vis/). This repository builds `atomaestro`, which is not on PyPI yet. Do not install both full distributions in one environment. Details: [migration guide](docs/rebranding.md) and [issue #316](https://github.com/SchrodingersCattt/Atomaestro/issues/316).
+> **Package migration:** The GitHub project is **Atomaestro** (formerly MatterVis). The command stays `mat-vis`, and Python imports stay `mat_viewer`. For the renamed release, see [`atomaestro` on PyPI](https://pypi.org/project/atomaestro/). Do not install both full distributions in one environment. Details: [migration guide](docs/rebranding.md) and [issue #316](https://github.com/SchrodingersCattt/Atomaestro/issues/316).
 
 ## Overview
 
@@ -56,25 +56,17 @@ distribution name is `atomaestro`. See the [migration guide](docs/rebranding.md)
 
 ### From PyPI
 
-Install the release that is on PyPI today. The badge above points at it:
+For the renamed release, use a new environment or uninstall the legacy
+`matter-vis` package first:
 
 ```bash
-pip install "matter-vis==0.0.6"
+python -m pip uninstall -y matter-vis
+python -m pip install atomaestro
 ```
 
-`atomaestro` is the distribution name in this repository. It is not published.
-After a confirmed release is actually on PyPI, and not before, the command
-becomes:
-
-```bash
-pip install atomaestro
-```
-
-Do not install published `matter-vis` 0.0.6 and `atomaestro` into the same
-environment. That release owns `mat_viewer` and the `mat-vis` script. After
-`atomaestro` is published, uninstall `matter-vis` or use a new environment.
-`pip install -U matter-vis` is not the migration. No release version has been
-chosen.
+The old distribution owns the same `mat_viewer` package and `mat-vis`
+script. Do not install both in one environment. Upgrading `matter-vis`
+does not migrate to the new package.
 
 ### From source (development)
 
@@ -113,9 +105,8 @@ does not fall back to private MolCrysKit fields or local chemistry heuristics.
 Extended versus molecular presentation comes from
 ``MolecularCrystal.get_connectivity_report()``. Ball-and-stick strokes both
 ``covalent`` and ``coordination`` edges from ``BondRecord.role``; ball and
-space-filling do not draw those sticks. The development pin in
-``pyproject.toml`` tracks the MolCrysKit commit that exposes those fields
-until the API is on PyPI.
+space-filling do not draw those sticks. This checkout requires
+``molcrys-kit[desktop]>=0.9.0,<0.10.0`` for that contract.
 
 ## Quick Start
 

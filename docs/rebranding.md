@@ -2,12 +2,12 @@
 
 **Current status:** The GitHub repository is **[Atomaestro](https://github.com/SchrodingersCattt/Atomaestro)** (formerly MatterVis). This checkout builds the PyPI distribution `atomaestro`. The command remains `mat-vis`. Python imports remain `mat_viewer`. Machine-facing contracts such as `mattervis.capabilities/v1`, `mattervis.tui.renderers`, and `mattervis.native-v1` are unchanged.
 
-`atomaestro` is not published yet. The release on PyPI today is still [`matter-vis` 0.0.6](https://pypi.org/project/matter-vis/). Do not describe `atomaestro` as an installable release until that upload exists.
+Check [`atomaestro` on PyPI](https://pypi.org/project/atomaestro/) for release availability. The old [`matter-vis` 0.0.6](https://pypi.org/project/matter-vis/) remains available under its original name.
 
-| Surface | What works today | What this repository now builds |
+| Surface | Previous distribution and interfaces | What this repository now builds |
 |---|---|---|
 | GitHub | [`SchrodingersCattt/Atomaestro`](https://github.com/SchrodingersCattt/Atomaestro) | No further repository move |
-| PyPI distribution | [`matter-vis` 0.0.6](https://pypi.org/project/matter-vis/) | `atomaestro`, after the next confirmed tag |
+| PyPI distribution | [`matter-vis` 0.0.6](https://pypi.org/project/matter-vis/) | [`atomaestro`](https://pypi.org/project/atomaestro/) |
 | CLI | `mat-vis` | `mat-vis` only. No second command is added |
 | Python imports | `mat_viewer` | `mat_viewer` |
 | Plugin contract | `mattervis.tui.renderers` / `mattervis.native-v1` | Same entry-point group and name |
@@ -23,21 +23,22 @@ PyPI does not rename `matter-vis` to `atomaestro`.
 - [Choosing a project name](https://docs.pypi.org/project-management/choosing-a-name/) treats a different name as a new project. [Troubleshooting](https://docs.pypi.org/project-management/troubleshooting/) says deleting a project is permanent and releases the name. Do not delete `matter-vis`.
 - A [pending trusted publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/) creates the new project on first publish. It does not reserve the name before that upload. If another user registers `atomaestro` first, the pending publisher is invalidated.
 
-On 2026-11-23 the public JSON URLs `https://pypi.org/pypi/atomaestro/json` and `https://pypi.org/pypi/atomestro/json` both returned 404. No release is published under those names. A pending publisher was configured on 2026-11-22 at 13:09 for project `atomaestro`, owner `SchrodingersCattt`, repository `Atomaestro`, workflow filename `release.yml`, and environment `pypi`. That registration matches the workflow. It does not reserve the name until the first successful publish. Those 404 responses are not a trademark search, a domain registration check, or a legal clearance.
+On 2026-11-23 the public JSON URLs `https://pypi.org/pypi/atomaestro/json` and `https://pypi.org/pypi/atomestro/json` both returned 404 at that time. A pending publisher was configured on 2026-11-22 at 13:09 for project `atomaestro`, owner `SchrodingersCattt`, repository `Atomaestro`, workflow filename `release.yml`, and environment `pypi`. That registration matches the workflow. It does not reserve the name until the first successful publish. Those 404 responses are not a trademark search, a domain registration check, or a legal clearance.
 
 ## Install
 
-Install the package that is on PyPI today:
+The legacy package remains available:
 
 ```bash
 python -m pip install "matter-vis==0.0.6"
 mat-vis --help
 ```
 
-`atomaestro` is not published. No release version has been chosen. After a
-confirmed release is actually on PyPI, and not before, the command becomes:
+For the renamed release, use a new environment or first uninstall the old
+package:
 
 ```bash
+python -m pip uninstall -y matter-vis
 python -m pip install atomaestro
 mat-vis --help
 ```
@@ -98,41 +99,26 @@ The workflow file on disk is `.github/workflows/release.yml`. PyPI asks for the 
 
 [Publishing with a trusted publisher](https://docs.pypi.org/trusted-publishers/using-a-publisher/) requires `id-token: write`. [Attestations](https://docs.pypi.org/attestations/) are the PEP 740 publish attestation produced by the same OIDC identity. The action enables them by default; the workflow sets the input explicitly.
 
-## PyPI upload is blocked on the MolCrysKit direct reference
+## MolCrysKit dependency and release gate
 
-`pyproject.toml` still requires:
+The Atomaestro 0.0.7 release candidate declares
+`molcrys-kit[desktop]>=0.9.0,<0.10.0`. CI tests against `molcrys-kit==0.9.0` and
+the release workflow rejects direct references in the metadata of the wheel
+and sdist. The upload mechanism is unchanged.
 
-```text
-molcrys-kit[desktop] @ git+https://github.com/SchrodingersCattt/MolCrysKit.git@2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6
-```
-
-That commit, dated 2026-11-20, is 30 commits after tag `v0.8.0` (`4aa65179`, 2026-10-23). It is the authorized runtime pin. This change does not replace it.
-
-Public PyPI rejects that requirement. PEP 440 says a public index should not allow direct references in an uploaded distribution, and Warehouse returns `Can't have direct dependency` for `Requires-Dist` values whose requirement URL is set ([warehouse #7136](https://github.com/pypi/warehouse/issues/7136), `warehouse.forklift.metadata`). A green build does not make the upload valid.
-
-Checked again on 2026-11-23, the newest PyPI release and the newest final GitHub tag are still `molcrys-kit` 0.8.0 (`v0.8.0`, 2026-10-23). The published wheel's `BondRecord` has no `role` field. The wheel has no `get_connectivity_report`, no `read_mryx`, and no `desktop` extra. Its extras are `vis`, `test`, and `dev`. That release does not provide the pinned contract:
-
-| API | `v0.8.0` | commit `2a3ee11` |
-|---|---|---|
-| `BondRecord.role` | absent | present |
-| `MolecularCrystal.get_connectivity_report` | absent | present |
-| `read_mryx` / `read_mryx_atoms` | absent | present |
-| `desktop` extra (`defusedxml`, used by `read_mryx`) | absent | present |
-
-There is no released version, and therefore no normal `molcrys-kit>=X,<Y` range, that can replace the pin. Do not fall back to 0.8.0.
-
-`.github/scripts/reject_direct_dependencies.py` fails the release workflow when a built wheel or sdist contains a direct reference, when the canonical metadata lists no `Requires-Dist` at all, when the tag is not `vX.Y.Z`, when the artifact name is `matter-vis`, and when `--project atomaestro` does not match the artifact name. The release commands pass that project name. The wheel built with the pinned toolchain carries the git URL above in `METADATA`. The matching sdist records that same URL in `PKG-INFO` and in `requires.txt`. All three fail the check. The release build job runs it before uploading artifacts. That job already installs `build`, `setuptools`, and `setuptools-scm` under `requirements/ci-constraints.txt`, which pins `packaging==26.3`, before the script. The PyPI job and the GitHub Release job install that same pinned `packaging` before they run the script again, then publish. A tag push of this tree fails that check. That is the release block. Pull-request CI feeds the wheel and sdist it just built to the same script and expects rejection, so the blocked release does not fail the pull request. The test also builds those artifacts and accepts a wheel whose `Requires-Dist` is a normal version requirement.
-
-Replacing the pin requires a MolCrysKit release that the user confirms by version. This pull request does not create that release. The confirmed release has to include the contract above and install on Windows as a normal PyPI requirement, because Atomaestro's Windows job and a public install cannot keep a git URL. Until that release exists, do not publish `atomaestro`.
+Historically the project used MolCrysKit commit
+`2a3ee11e4c708b64691181cc2cbc4b2a3625f0c6` before the API was released.
+That entry records the original integration and is not a runtime
+dependency. Do not use MolCrysKit 0.8.0 for this release.
 
 ## Version
 
-The published Atomaestro predecessor is `matter-vis` 0.0.6. No next version is approved. `0.1.0` remains the proposal for the first `atomaestro` release because PyPI treats that name as a new project, not as a patch of `matter-vis` 0.0.6. It is not the chosen tag. Do not tag from this change.
+The predecessor is `matter-vis` 0.0.6. The renamed release candidate is `atomaestro` 0.0.7; verify upstream compatibility and the package build before tagging.
 
 ## Still open
 
 - The pending publisher is configured. The GitHub environment `pypi` reviewer and tag limits are unchanged.
-- A user-confirmed MolCrysKit release replaces the direct URL, and the metadata check then passes.
+- Verify the published versions and a clean installation after release.
 - A chosen tag publishes `atomaestro` and is verified by install.
 - An empty `matter-vis` forwarder is not published. Automatic `pip install -U matter-vis` is not a supported migration.
 - No second command. `atomestro` in issue #316 is a stale spelling and is not a console script. The command remains `mat-vis`. The help banner still says `MatterVis`; changing that string is a separate decision.
@@ -144,4 +130,4 @@ The published Atomaestro predecessor is `matter-vis` 0.0.6. No next version is a
 
 This draft is not posted.
 
-The GitHub repository is SchrodingersCattt/Atomaestro. The command remains `mat-vis`. Python imports remain `mat_viewer`. The package on PyPI today is still `matter-vis` 0.0.6. This repository builds `atomaestro`, which is not published yet. Move an existing install by uninstalling `matter-vis` and then installing `atomaestro`, or by using a new environment. No new command was added. This note is not a release announcement.
+The GitHub repository is SchrodingersCattt/Atomaestro. The command remains `mat-vis`. Python imports remain `mat_viewer`. The preceding distribution was `matter-vis` 0.0.6. This repository builds `atomaestro`. Move an existing install by uninstalling `matter-vis` and then installing `atomaestro`, or by using a new environment. No new command was added. This note is not a release announcement.

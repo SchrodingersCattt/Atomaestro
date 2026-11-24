@@ -9,8 +9,8 @@ permissions:
   contents: read
 
 env:
-  MOLCRYSKIT_MINIMUM: "0.8.0"
-  MOLCRYSKIT_UPPER: "0.9.0"
+  MOLCRYSKIT_MINIMUM: "0.9.0"
+  MOLCRYSKIT_UPPER: "0.10.0"
   CI_PIP_VERSION: "26.3"
 
 jobs:

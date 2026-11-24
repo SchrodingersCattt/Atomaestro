@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MOLCRYSKIT_MINIMUM: "0.8.0"
-  MOLCRYSKIT_UPPER: "0.9.0"
+  MOLCRYSKIT_MINIMUM: "0.9.0"
+  MOLCRYSKIT_UPPER: "0.10.0"
   # Deliberate toolchain baseline. The compatibility-drift workflow is the
   # place that floats these. A run_attempt above 1 is a rerun, not a clean
   # first-attempt success. Cancellations are concurrency, not flakes.
@@ -402,17 +402,8 @@ jobs:
                   missing.append(packaged)
           assert not missing, missing
 
-      - name: Upload guard rejects this built wheel
-        run: |
-          set -euo pipefail
-          set +e
-          python .github/scripts/reject_direct_dependencies.py --tag v9.9.9 dist/*
-          status=$?
-          set -e
-          if [ "$status" -ne 1 ]; then
-            echo "expected the current artifacts to be rejected, exit ${status}" >&2
-            exit 1
-          fi
+      - name: Validate wheel and sdist for PyPI
+        run: python .github/scripts/reject_direct_dependencies.py --project atomaestro --tag v9.9.9 dist/*
 
       - name: Upload package-build environment
         if: always()

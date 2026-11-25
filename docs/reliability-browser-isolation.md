@@ -55,8 +55,13 @@ store survive from one test to the next when they share a server.
   compass and render-status rectangles), the lowest ink strip, and the
   camera with scene generation, geometry version, and coordinate digest.
   A frame with no counted ink, a Node failure, a timeout, and a restore
-  toast keep the screenshots that exist and still fail. The 8% margin
+  toast keep the screenshots that exist and still fail.   The 8% margin
   and the 8px centering check are unchanged.
+  Both Fit runners turn Axes off and wait until the SVG compass has no
+  children before that screenshot. A camera relayout must not repaint the
+  compass while the Axes checkbox is unchecked, including before the
+  display update stores the enabled flag. Compass pixels still count
+  toward the margin when Axes stays on.
   CI uploads that directory with `if: always()`. Assertions are unchanged.
   The 100-switch socket census records DOM snapshots and not trace
   screenshots. Capturing both during each WebGL scene swap stalls

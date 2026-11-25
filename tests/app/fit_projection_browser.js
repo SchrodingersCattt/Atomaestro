@@ -185,6 +185,32 @@ function sameSample(left, right) {
     && JSON.stringify(left.ranges) === JSON.stringify(right.ranges);
 }
 
+async function axesCompassOff(page) {
+  const box = page.locator("#display-options input[value='axes']");
+  if (await box.count() && await box.isChecked()) {
+    await box.locator("xpath=ancestor::label[1]").click();
+  }
+  try {
+    await page.waitForFunction(() => {
+      const node = document.querySelector("#display-options input[value='axes']");
+      const svg = document.getElementById("mv-compass-svg");
+      return !!node && node.checked === false && (!svg || svg.childElementCount === 0);
+    }, null, {timeout: 10000});
+  } catch (error) {
+    const observed = await page.evaluate(() => {
+      const node = document.querySelector("#display-options input[value='axes']");
+      const svg = document.getElementById("mv-compass-svg");
+      return {
+        checked: node ? node.checked : null,
+        children: svg ? svg.childElementCount : null,
+        enabled: window.__mv_axes_enabled,
+      };
+    });
+    error.message += " axes-compass=" + JSON.stringify(observed);
+    throw error;
+  }
+}
+
 async function fit(page, projection) {
   const posted = await page.evaluate(async (mode) => {
     const gd = document.querySelector("#crystal-graph .js-plotly-plot");
@@ -212,14 +238,7 @@ async function fit(page, projection) {
     await new Promise((resolve) => setTimeout(resolve, 50));
     if (Date.now() >= settleProjection) fail("projection did not settle " + JSON.stringify(sample));
   }
-  const axesBox = page.locator("#display-options input[value='axes']");
-  if (await axesBox.count() && await axesBox.isChecked()) {
-    await axesBox.locator("xpath=ancestor::label[1]").click();
-    await page.waitForFunction(() => {
-      const box = document.querySelector("#display-options input[value='axes']");
-      return !box || !box.checked;
-    }, null, { timeout: 10000 });
-  }
+  await axesCompassOff(page);
   const beforeClick = await page.evaluate(liveSample);
   const pending = page.waitForResponse((response) => {
     return response.url().includes("/api/v2/camera/action") && response.request().method() === "POST";
@@ -302,6 +321,7 @@ async function main() {
       for (const projection of ["perspective", "orthographic"]) {
         const frame = await fit(page, projection);
         if (frame.projection !== projection) fail("painted projection " + frame.projection);
+        await axesCompassOff(page);
         if (!(frame.width > 200 && frame.height > 200)) fail("plot size " + frame.width + "x" + frame.height);
         const name = `${size.width}x${size.height}-${projection}.png`;
         await page.evaluate(() => new Promise((resolve) => {

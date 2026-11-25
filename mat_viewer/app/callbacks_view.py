@@ -15,6 +15,7 @@ from .view_updates import UpdateKind, classify_change, make_update, mounted_scen
 from .projection_controls import (
     accept_projection_ticket,
     projection_command,
+    projection_command_lock,
     selected_scene_projection,
     triggered_component_ids,
 )
@@ -573,32 +574,36 @@ def register_view_callbacks(app, backend):
         if not command or not scene_tab or scene_tab not in backend.scene_store.scenes:
             return (no_update,) * 4
         scene_id = scene_tab
-        if not accept_projection_ticket(scene_id, command_ticket):
-            return (no_update,) * 4
-        # Skip the redraw if the user clicked the radio that was
-        # already selected -- avoids ratcheting the figure JSON cache
-        # for a no-op.
-        current = backend.get_state(scene_id).get("projection", "perspective")
-        if str(command) == str(current):
-            return (no_update,) * 4
-        try:
-            camera = backend.set_projection(command, scene_id=scene_id, broadcast=False)
-        except Exception:  # pragma: no cover
-            return (no_update,) * 4
-        state = backend.get_state(scene_id)
-        camera_payload = _camera_store_for_state(state, camera)
-        update = make_update(
-            state,
-            operation="camera",
-            payload={"camera": camera, "command": "projection"},
-            reason="projection-command",
-        ).to_dict()
-        return (
-            camera_payload,
-            update,
-            _fast_view_metadata(backend, state, camera_payload),
-            no_update,
-        )
+        # The ticket check and no-op decision must share the commit's lock.
+        # Otherwise a newer same-as-current click can return while an older
+        # differing command is still fitting and later overwrites it.
+        with projection_command_lock(scene_id):
+            if not accept_projection_ticket(scene_id, command_ticket):
+                return (no_update,) * 4
+            # Skip the redraw if the user clicked the radio that was
+            # already selected -- avoids ratcheting the figure JSON cache
+            # for a no-op.
+            current = backend.get_state(scene_id).get("projection", "perspective")
+            if str(command) == str(current):
+                return (no_update,) * 4
+            try:
+                camera = backend.set_projection(command, scene_id=scene_id, broadcast=False)
+            except Exception:  # pragma: no cover
+                return (no_update,) * 4
+            state = backend.get_state(scene_id)
+            camera_payload = _camera_store_for_state(state, camera)
+            update = make_update(
+                state,
+                operation="camera",
+                payload={"camera": camera, "command": "projection"},
+                reason="projection-command",
+            ).to_dict()
+            return (
+                camera_payload,
+                update,
+                _fast_view_metadata(backend, state, camera_payload),
+                no_update,
+            )
 
     from .camera_clientside import register_camera_clientside
 

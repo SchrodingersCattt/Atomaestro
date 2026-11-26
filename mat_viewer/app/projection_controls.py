@@ -10,6 +10,7 @@ from .camera_helpers import _coerce_projection
 # A slow orthographic commit must not land after the later perspective click.
 _TICKET_LOCK = threading.Lock()
 _PROJECTION_TICKETS: dict[str, int] = {}
+_PROJECTION_COMMAND_LOCKS = {}
 
 
 def triggered_component_ids(context):
@@ -68,3 +69,19 @@ def accept_projection_ticket(scene_id, ticket) -> bool:
             return False
         _PROJECTION_TICKETS[key] = current
         return True
+
+
+def projection_command_lock(scene_id):
+    """Serialize ticket acceptance through commit, independently per scene.
+
+    Never wait for a scene lock while holding the registry/ticket lock.
+    A newer command matching the pre-commit state must wait for the older
+    command, not return as a no-op while that older command can still land.
+    """
+    key = str(scene_id)
+    with _TICKET_LOCK:
+        lock = _PROJECTION_COMMAND_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _PROJECTION_COMMAND_LOCKS[key] = lock
+    return lock

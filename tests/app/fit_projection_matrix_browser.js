@@ -80,6 +80,7 @@ async function fit(page, projection, boundary) {
     }
   }
   await setChecked("axes", false);
+  await axesCompassOff(page);
   await setChecked("unit_cell_box", boundary);
   const pending = page.waitForResponse((response) => response.url().includes("/api/v2/camera/action"), { timeout: 20000 });
   await page.locator("#canvas-view-fit").click();
@@ -271,9 +272,38 @@ function readPaint() {
   };
 }
 
+async function axesCompassOff(page) {
+  const box = page.locator("#display-options input[value='axes']");
+  if (await box.count() && await box.isChecked()) {
+    await box.locator("xpath=ancestor::label[1]").click();
+  }
+  try {
+    await page.waitForFunction(() => {
+      const node = document.querySelector("#display-options input[value='axes']");
+      const svg = document.getElementById("mv-compass-svg");
+      return !!node && node.checked === false && (!svg || svg.childElementCount === 0);
+    }, null, {timeout: 10000});
+  } catch (error) {
+    const observed = await page.evaluate(() => {
+      const node = document.querySelector("#display-options input[value='axes']");
+      const svg = document.getElementById("mv-compass-svg");
+      return {
+        checked: node ? node.checked : null,
+        children: svg ? svg.childElementCount : null,
+        enabled: window.__mv_axes_enabled,
+      };
+    });
+    error.message += " axes-compass=" + JSON.stringify(observed);
+    throw error;
+  }
+}
+
 async function capture(page, shots, name, projection, boundary, consoleErrors) {
   const frame = await fit(page, projection, boundary);
   if (frame.projection !== projection) fail(name + " projection " + frame.projection);
+  // The margin counts compass ink. Fit's relayout can repaint the triad
+  // after Axes was turned off, so the shutter waits until it is gone.
+  await axesCompassOff(page);
   await page.evaluate(() => new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(resolve));
   }));

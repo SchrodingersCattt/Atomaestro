@@ -4647,7 +4647,15 @@
   function redrawCompass(gd, eventCamera, preferLiveCamera) {
     if (window.__mv_compass_diag) window.__mv_compass_diag.svg_redraws += 1;
     if (!gd || !gd.layout) return;
-    if (window.__mv_axes_enabled === false) {
+    /* The Axes checkbox flips before the display update sets
+       __mv_axes_enabled. A Fit relayout in that gap used to redraw the
+       triad from stale metadata. The painted margin counts those pixels,
+       so an unchecked box clears the overlay even when the flag is still on. */
+    let axesBox = null;
+    if (typeof document !== "undefined" && document.querySelector) {
+      axesBox = document.querySelector("#display-options input[value='axes']");
+    }
+    if (window.__mv_axes_enabled === false || (axesBox && !axesBox.checked)) {
       const root = graphRoot();
       const svg = root ? root.querySelector("#" + SVG_LAYER_ID) : null;
       if (svg) clearSvg(svg);

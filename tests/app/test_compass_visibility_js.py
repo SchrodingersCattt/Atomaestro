@@ -57,6 +57,26 @@ assert.equal(svg.children.length, 0, 'disabled context should stay hidden before
 sandbox.window.__mv_axes_enabled = true;
 sandbox.redrawCompass(frame, {}, false);
 assert.equal(svg.children.length, 1, 'Axes could not be enabled from a stored context');
+
+// Fit's camera relayout can run while the checkbox is already off and the
+// display update has not yet cleared __mv_axes_enabled.
+let draws = 0;
+sandbox.drawCompassSvg = target => { draws += 1; target.children = ['current-arrows']; };
+sandbox.document = {
+  querySelector: (selector) => (
+    selector === "#display-options input[value='axes']" ? {checked: false} : null
+  ),
+};
+frame.layout.meta = {compass: {M: [[1,0,0],[0,1,0],[0,0,1]]}};
+sandbox.window.__mv_axes_enabled = true;
+svg.children = ['stale-fit-relayout'];
+sandbox.redrawCompass(frame, {}, false);
+assert.equal(draws, 0, 'unchecked Axes checkbox still painted the compass');
+assert.equal(svg.children.length, 0, 'camera relayout left the compass up after Axes was unchecked');
+sandbox.document.querySelector = () => ({checked: true});
+sandbox.redrawCompass(frame, {}, false);
+assert.equal(draws, 1, 'a checked Axes box did not restore the compass');
+assert.equal(svg.children.length, 1);
 """
     result = subprocess.run([node, "-e", program, str(source)], capture_output=True,
                             text=True, timeout=15)

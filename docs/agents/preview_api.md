@@ -169,10 +169,12 @@ A live Python object that has no JSON form (for example a
 plus backend, format, encoder, and package version. The object is kept
 on that namespace’s entry until eviction.
 
-Limits are 32 entries and 64 MiB per cache. A single image larger than
-the byte budget is returned and not retained (`retained: false`,
-`ticket: null`). Same-namespace callers that submit the same request
-while a raster is in flight share that raster (`cache_status:
+Limits are 32 entries and 64 MiB per cache. The byte count is the PNG
+or WebP plus the retained replay JSON, which includes the structure
+text, plus a live in-memory source when the request has no JSON form.
+An entry over that budget is returned and not retained (`retained:
+false`, `ticket: null`). Same-namespace callers that submit the same
+request while a raster is in flight share that raster (`cache_status:
 "coalesced"`).
 
 The response also includes `plan_sha256`, which is

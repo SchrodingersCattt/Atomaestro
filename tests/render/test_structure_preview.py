@@ -160,6 +160,49 @@ def test_explicit_fitted_camera_reuses_the_raster():
     assert again.data == fitted.data
 
 
+def test_cache_budget_counts_retained_source_bytes():
+    scene = {**_SCENE, "preview_padding": "x" * 50_000}
+    roomy = PreviewCache(max_entries=2, max_bytes=8_000_000)
+    image = render_preview(
+        scene,
+        cache=roomy,
+        namespace="budget",
+        camera=_CAMERA,
+        style=_STYLE,
+        width=48,
+        height=32,
+        scale=1,
+    )
+    assert image.retained is True
+    assert len(image.data) < 8_000
+    tight = PreviewCache(max_entries=4, max_bytes=len(image.data) + 1_000)
+    kept_out = render_preview(
+        scene,
+        cache=tight,
+        namespace="budget",
+        camera=_CAMERA,
+        style=_STYLE,
+        width=48,
+        height=32,
+        scale=1,
+    )
+    assert kept_out.retained is False
+    assert kept_out.ticket is None
+    assert kept_out.data == image.data
+    again = render_preview(
+        scene,
+        cache=tight,
+        namespace="budget",
+        camera=_CAMERA,
+        style=_STYLE,
+        width=48,
+        height=32,
+        scale=1,
+    )
+    assert again.cache_status == "miss"
+    assert again.retained is False
+
+
 def test_eviction_drops_tickets_and_oversized_images_are_not_retained():
     cache = PreviewCache(max_entries=1, max_bytes=8_000_000)
     first = _preview(cache)
@@ -182,7 +225,7 @@ def test_concurrent_requests_rasterize_once():
     waiter_ready = threading.Event()
     calls = []
     preview_module = __import__(
-        "mat_viewer.render.preview", fromlist=["encode_preview_raster"]
+        "mat_viewer.render.preview_cache", fromlist=["encode_preview_raster"]
     )
     original_encode = preview_module.encode_preview_raster
     original_join = PreviewCache._join

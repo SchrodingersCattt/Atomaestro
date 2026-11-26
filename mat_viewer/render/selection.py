@@ -8,6 +8,7 @@ from .picking import (
     atom_instance_id,
     atom_parent_targets,
     bond_instance_id,
+    bond_parent_targets,
     ensure_polyhedron_instance_ids,
     polyhedron_instance_id,
 )
@@ -324,7 +325,8 @@ def _bond_selection_trace(scene: dict, style: dict) -> "go.Scatter3d | None":
         return None
     n = len(atoms)
     xs, ys, zs, customdata, hover = [], [], [], [], []
-    segments, bond_radii = [], []
+    segments, bond_radii, bond_parents = [], [], []
+    fragment_labels = scene.get("atom_fragment_labels") or []
     if {(a.get("_render_style") or style.get("style")) for a in atoms} == {"ball"}:
         return None
     for bond_index, bond in enumerate(bonds):
@@ -341,6 +343,7 @@ def _bond_selection_trace(scene: dict, style: dict) -> "go.Scatter3d | None":
         mid = (start + end) / 2.0
         segments.append([start.tolist(), end.tolist()])
         bond_radii.append(float(style.get("bond_radius", .15)) * float(bond.get("_render_radius_scale", 1)))
+        bond_parents.append(bond_parent_targets(bond, atoms, fragment_labels))
         label_i = str(atoms[i].get("label") or "")
         label_j = str(atoms[j].get("label") or "")
         elem_i = str(atoms[i].get("elem") or "")
@@ -375,7 +378,7 @@ def _bond_selection_trace(scene: dict, style: dict) -> "go.Scatter3d | None":
         hovertext=hover,
         hovertemplate="%{hovertext}<extra></extra>",
         showlegend=False,
-        meta={"mv_segments": segments, "mv_bond_radii": bond_radii},
+        meta={"mv_segments": segments, "mv_bond_radii": bond_radii, "mv_parents": bond_parents},
         name="bond-selection",
     ), "bond_selection")
 

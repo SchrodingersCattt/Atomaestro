@@ -26,6 +26,14 @@ const frontStick={type:'scatter3d',x:[0],y:[0],z:[0],customdata:[{kind:'bond',id
 assert.equal(api.hits(graph([frontStick,coveringAtom]),100,100)[0].id,'atom:center');
 assert.equal(api.hits(graph([frontStick]),100,100)[0].id,'bond:front');
 assert.equal(api.hits(graph([atom]),100,100)[0].metadata.parents[0].id,'part:a');
+const parented={type:'scatter3d',x:[0],y:[0],z:[0],customdata:[{kind:'bond',id:'bond:parented'}],meta:{mv_role:'bond_selection',mv_segments:[[[-.8,0,0],[.8,0,0]]],mv_parents:[[{kind:'molecule',id:'molecule:7'},{kind:'part',id:'molecule:7|part:1'}]]}};
+const parentIndex=api.index(graph([parented]));
+assert.equal(parentIndex.primitives[0].parents[1].id,'molecule:7|part:1');
+assert.equal(api.hits(graph([parented]),35,100)[0].metadata.parents[0].id,'molecule:7');
+assert.equal(api.promotionTarget({kind:'bond',id:'bond:parented',metadata:{parents:parentIndex.primitives[0].parents}}).kind,'part');
+assert.equal(api.promotionTarget({kind:'atom',id:'a',metadata:{parents:[{kind:'molecule',id:'molecule:1'}]}}).id,'molecule:1');
+assert.equal(api.promotionTarget({kind:'atom',id:'bare',metadata:{parents:[]}}),null);
+assert.equal(api.promotionTarget({kind:'bond',id:'bond:parented'},parentIndex).id,'molecule:7|part:1');
 const gd=graph([front]);assert.equal(api.index(gd),api.index(gd));gd.data=[back];gd._fullData=gd.data;assert.equal(api.hits(gd,60,140)[0].id,'back');
 assert.equal(api.hits(graph([front]),190,10).length,0);
 console.log('semantic local picking contracts passed');

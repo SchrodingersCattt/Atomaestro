@@ -2674,6 +2674,29 @@
     sceneId: currentSceneId,
     graph: graphDiv,
   };
+  // The pointer controller calls this on a double-click and ignores the
+  // return value. A disorder PART is the tighter parent. No parent leaves
+  // the first press selected.
+  window.MatterVisDoubleClick = {
+    promote: function (payload) {
+      const picking = window.MatterVisScenePicking;
+      const semantic = window.MatterVisSemantic;
+      if (!picking || typeof picking.promotionTarget !== "function") return;
+      if (!semantic || typeof semantic.select !== "function") return;
+      const previous = payload && payload.previous;
+      const remembered = Array.isArray(previous) && previous.length === 1 ? previous[0] : null;
+      const hit = payload && payload.target;
+      const source = (remembered && (remembered.kind === "atom" || remembered.kind === "bond"))
+        ? remembered
+        : (hit && (hit.kind === "atom" || hit.kind === "bond") ? hit : null);
+      if (!source) return;
+      const gd = typeof semantic.graph === "function" ? semantic.graph() : null;
+      const indexed = gd && typeof picking.index === "function" ? picking.index(gd) : null;
+      const parent = picking.promotionTarget(source, indexed);
+      if (!parent) return;
+      semantic.select(parent, "replace");
+    },
+  };
   function hoverIsCurrent() {
     if (!lastHovered) return false;
     const scene = currentSceneId();

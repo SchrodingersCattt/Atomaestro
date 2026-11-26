@@ -81,15 +81,24 @@ All endpoints live under `/api/v2` and accept optional `scene_id`.
   event). When that mouse event has not arrived, a second plain press
   within 500 ms and 4 px is the same gesture. A miss does not clear the
   set, does not replace the first target, and is not sampled again after
-  the dock relayout. `window.MatterVisDoubleClick.promote` may publish a
-  wider target from that gesture by calling `MatterVisSemantic.select`.
-  The pointer controller ignores the hook's return value and does not
-  publish after it returns. A missing hook, or a hook that throws, leaves
-  the first press in place. Molecule and disorder PART promotion is not
-  performed here. The promote payload is
+  the dock relayout. `window.MatterVisDoubleClick.promote` publishes the
+  wider target by calling `MatterVisSemantic.select`. The pointer
+  controller ignores the hook's return value and does not publish after
+  it returns. A missing hook, or a hook that throws, leaves the first
+  press in place. The promote payload is
   `{clientX, clientY, scene, generation, target, previous}`: `target` is
   the second press's hit or `null`, and `previous` is the selection after
   the first press. Shift, Ctrl, and Alt do not take this path.
+  The installed hook promotes an atom or bond to its disorder PART when
+  the loader assigned one. Group `0` and `.` stay ordered, so they stay
+  with the molecule. Otherwise the target is that molecule instance,
+  including the same periodic image and symmetry operation. The committed
+  target is one `part` or `molecule` id. The overlay strokes every visible
+  atom of that parent and every visible bond that belongs to it. A bond is
+  in a PART when one endpoint is in that PART and the other is in the same
+  PART or has no PART of its own. A complementary PART, and another
+  molecule that reuses the part label, stay unselected. An object with no
+  molecule membership stays the single atom or bond.
 - Plotly `clickData` still updates the analysis fragment
   (`topology-site-index`). It does not write the semantic selection.
 - A browser gesture carries a numeric `ts`. An older gesture does not

@@ -50,6 +50,14 @@ def test_hover_and_context_menu_have_no_server_coordinate_fallback():
     assert "isDoubleClick" in select
     assert "mouseDetail>=2" in controller
     assert "willChange" in controller
+    assert "promoteDoubleClick" not in source
+    assert "primaryClick" not in controller
+    hook = source[source.index("window.MatterVisDoubleClick ="):source.index("function hoverIsCurrent")]
+    assert "promotionTarget" in hook
+    assert "MatterVisSemantic" in hook
+    assert ".select(" in hook
+    pointerup_body = pointerup
+    assert "e.detail" not in pointerup_body
 
 
 def test_selection_outline_does_not_wait_on_an_unchanged_gutter():

@@ -75,17 +75,21 @@ All endpoints live under `/api/v2` and accept optional `scene_id`.
   identity of the first hit stays. A plain click that misses while a
   width/height relayout is already in flight is sampled again after that
   relayout, and it clears only if the settled viewport is still empty.
-- A second press the platform reports as a double-click (`detail >= 2` on
-  the pointer event, plain click without Alt) is one gesture. A miss does
-  not clear the set, and the press does not replace the first target.
-  `window.MatterVisDoubleClick.promote` may publish a wider target from that
-  gesture by calling `MatterVisSemantic.select`. The pointer controller
-  ignores the hook's return value and does not publish after it returns. A
-  missing hook, or a hook that throws, leaves the first press in place.
-  Molecule and disorder PART promotion is not performed here. The promote
-  payload is `{clientX, clientY, scene, generation, target, previous}`:
-  `target` is the second press's hit or `null`, and `previous` is the
-  selection after the first press.
+- A second press of a double-click is one gesture. Pointer events keep
+  `detail` at 0. The platform click count is the `mousedown` dispatched
+  after `pointerdown` and before `pointerup` (`detail >= 2` on that mouse
+  event). When that mouse event has not arrived, a second plain press
+  within 500 ms and 4 px is the same gesture. A miss does not clear the
+  set, does not replace the first target, and is not sampled again after
+  the dock relayout. `window.MatterVisDoubleClick.promote` may publish a
+  wider target from that gesture by calling `MatterVisSemantic.select`.
+  The pointer controller ignores the hook's return value and does not
+  publish after it returns. A missing hook, or a hook that throws, leaves
+  the first press in place. Molecule and disorder PART promotion is not
+  performed here. The promote payload is
+  `{clientX, clientY, scene, generation, target, previous}`: `target` is
+  the second press's hit or `null`, and `previous` is the selection after
+  the first press. Shift, Ctrl, and Alt do not take this path.
 - Plotly `clickData` still updates the analysis fragment
   (`topology-site-index`). It does not write the semantic selection.
 - A browser gesture carries a numeric `ts`. An older gesture does not

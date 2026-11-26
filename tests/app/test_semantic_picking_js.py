@@ -38,13 +38,17 @@ def test_hover_and_context_menu_have_no_server_coordinate_fallback():
     assert "FRAME_SETTLE_MS" in select
     assert "selectionAttemptCurrent(token, scene, generation)" in select
     assert "__mvGraphGeneration" not in select
-    pointerdown = controller[controller.index('addEventListener("pointerdown"'):controller.index("function select(")]
+    pointerdown = controller[controller.index('addEventListener("pointerdown"'):controller.index('addEventListener("mousedown"')]
     assert "generation:currentSceneGeneration()" in pointerdown
     assert "attempt:selectionAttemptToken" in pointerdown
-    assert "Number(e.detail)>=2" in pointerdown
+    assert "e.detail" not in pointerdown
+    mousedown = controller[controller.index('addEventListener("mousedown"'):controller.index("function isDoubleClick(")]
+    assert "mouseDetail" in mousedown
+    assert "e.detail" in mousedown
     assert "select(e, gesture)" in pointerup
     assert "MatterVisDoubleClick" in controller
-    assert "detail >= 2" in select
+    assert "isDoubleClick" in select
+    assert "mouseDetail>=2" in controller
     assert "willChange" in controller
 
 

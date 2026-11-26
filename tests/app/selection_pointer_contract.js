@@ -1,7 +1,9 @@
 /* Selection outline timing and the double-click gesture.
  * The first paint must not wait on a gl3d relayout when the dock column
  * width is unchanged. An open/close still refits, then re-projects the
- * same targets. A platform double-click (detail >= 2) must not clear. */
+ * same targets. Pointer events keep detail at 0. The platform click count
+ * is the mousedown between pointerdown and pointerup. A second press with
+ * that count must not clear on a miss. */
 const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
@@ -238,15 +240,45 @@ async function settle() {
 }
 function selected() { return sandbox.window.MatterVisSemantic.selected(); }
 function selectionWrites() { return stores.filter((item) => item.id === 'scene-selection-store'); }
-function press(detail, x, y, extra) {
-  const base = Object.assign({
-    button: 0, detail, clientX: x, clientY: y, target: graph,
-    altKey: false, shiftKey: false, ctrlKey: false, metaKey: false,
-    preventDefault() {}, stopPropagation() {},
-  }, extra || {});
+function dispatch(type, detail, buttons, x, y, extra) {
+  graph.dispatchEvent(Object.assign({
+    type: type,
+    detail: detail,
+    button: 0,
+    buttons: buttons,
+    clientX: x,
+    clientY: y,
+    target: graph,
+    altKey: false,
+    shiftKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    preventDefault() {},
+    stopPropagation() {},
+  }, extra || {}));
+}
+// Hovering-mouse order from the Pointer Events compatibility mapping:
+// pointerdown, mousedown, pointerup, mouseup, click. Pointer detail stays 0.
+function press(clickCount, x, y, extra) {
   inPointer = true;
-  graph.dispatchEvent(Object.assign({type: 'pointerdown', buttons: 1}, base));
-  graph.dispatchEvent(Object.assign({type: 'pointerup', buttons: 0}, base));
+  dispatch('pointerdown', 0, 1, x, y, extra);
+  dispatch('mousedown', clickCount, 1, x, y, extra);
+  dispatch('pointerup', 0, 0, x, y, extra);
+  inPointer = false;
+  dispatch('mouseup', clickCount, 0, x, y, extra);
+  dispatch('click', clickCount, 0, x, y, extra);
+}
+function pressPointerOnly(x, y) {
+  inPointer = true;
+  dispatch('pointerdown', 0, 1, x, y);
+  dispatch('pointerup', 0, 0, x, y);
+  inPointer = false;
+}
+function pressStuffedPointerDetail(x, y) {
+  inPointer = true;
+  dispatch('pointerdown', 2, 1, x, y);
+  dispatch('mousedown', 1, 1, x, y);
+  dispatch('pointerup', 2, 0, x, y);
   inPointer = false;
 }
 function list(value) { return Array.from(value || [], (item) => item); }
@@ -286,7 +318,8 @@ function ids() { return list(selected()).map((item) => item.id); }
   assert.deepEqual(ids(), ['open'], 'a double-click miss during the open relayout must not clear');
   assert.equal(selectionWrites().length, writesAfterOpen);
   await settle();
-  assert.deepEqual(ids(), ['open']);
+  assert.deepEqual(ids(), ['open'], 'the settled resample must not clear a double-click miss');
+  assert.notEqual(selectionWrites().at(-1).data.mode, 'clear');
   assert.ok(invalidations > invalidBefore, 'the open relayout re-projects the same selection');
   assert.deepEqual(paints.at(-1).ids, ['atom:open']);
   assert.equal(center.style.paddingRight, '290px');
@@ -345,7 +378,7 @@ function ids() { return list(selected()).map((item) => item.id); }
   press(1, 15, 15);
   assert.equal(frames.length, 1, 'an unready index retries instead of clearing');
   press(2, 15, 15);
-  assert.equal(frames.length, 2, 'the second press must not cancel the first attempt');
+  assert.equal(frames.length, 1, 'the second press must not cancel the first attempt');
   primitives = [{}];
   hit = {kind: 'atom', id: 'late'};
   runFrames();
@@ -397,6 +430,16 @@ function ids() { return list(selected()).map((item) => item.id); }
   assert.deepEqual(ids(), []);
   assert.equal(selectionWrites().at(-1).data.mode, 'clear');
   assert.equal(center.style.paddingRight, '');
+
+  hit = {kind: 'atom', id: 'kept-click'};
+  press(1, 70, 70);
+  await settle();
+  hit = null;
+  pressPointerOnly(71, 71);
+  assert.deepEqual(ids(), ['kept-click'], 'a second pointer press with detail 0 still counts inside the fallback window');
+  hit = {kind: 'atom', id: 'far'};
+  pressStuffedPointerDetail(420, 420);
+  assert.deepEqual(ids(), ['far'], 'pointer detail is not the click count when mousedown says this is a single click');
 
   process.exit(0);
 })().catch(function (error) {

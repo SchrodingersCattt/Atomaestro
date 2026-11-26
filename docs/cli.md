@@ -314,6 +314,13 @@ Base Atomaestro provides CPU 3D and Matplotlib projected 2D PNG/PDF/SVG, ORTEP, 
 ordinary structure inputs. Run `mat-vis capabilities --require FEATURE --json`
 for an exact install command before using an optional frontend.
 
+Server-rendered review previews are not a `mat-vis render` flag.
+`POST /api/v2/preview` returns a cached CPU PNG/WebP or an explicit GPU
+PNG for a host that supplies the structure, style, camera, and pixel
+size. Matplotlib remains the projected 2D exporter and is not that
+preview. Opening one interactive viewer is a separate activation of the
+same render plan. See [agents/preview_api.md](agents/preview_api.md).
+
 ### Frames and animations
 
 | Flag | Default | Description |

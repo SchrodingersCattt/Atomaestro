@@ -7,6 +7,7 @@ __all__ = [
     "load_structure",
     "prepare_render",
     "render",
+    "render_preview",
     "resolve_requirements",
 ]
 
@@ -43,6 +44,13 @@ def render(*args, **kwargs):
     from .agent import render as _render
 
     return _render(*args, **kwargs)
+
+
+def render_preview(*args, **kwargs):
+    """Return a cached CPU or GPU preview raster for one prepared scene."""
+    from .render.preview import render_preview as _render_preview
+
+    return _render_preview(*args, **kwargs)
 
 
 def capabilities():

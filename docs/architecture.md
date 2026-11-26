@@ -78,6 +78,16 @@ splits intersecting polygons with a BSP, and splits strokes at projected
 occlusion boundaries before writing vector paths. An embedded full-page PNG
 is not a vector backend.
 
+## Embedded previews
+
+`POST /api/v2/preview` prepares the same `RenderPlan` as a static render
+and returns a cached CPU PNG or WebP, or an explicit GPU PNG. Matplotlib
+is not used. The image is a static raster. Activating the preview ticket
+returns one complete Plotly document for that plan. The cache is
+process-local and partitioned by caller namespace; the cache key does
+not include the namespace, and tickets are the only retrieval handle.
+Details are in [preview_api.md](agents/preview_api.md).
+
 ## Dependency direction
 
 The base path may import only base dependencies. Optional modules are loaded

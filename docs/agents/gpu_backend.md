@@ -44,7 +44,10 @@ Smooth shading keeps per-vertex lighting. Neither mode matches the analytic
 CPU sphere and cylinder rasters pixel for pixel.
 
 PNG, GIF, and MP4 are the supported outputs. HTML, PDF, and SVG stay on their
-existing explicit backends. GIF and MP4 also require `atomaestro[animation]`.
+existing explicit backends. A server preview can request this PNG path
+with `backend: "gpu"`; WebP is not a GPU preview format, and an
+unavailable adapter is an error rather than a CPU image. See
+[preview_api.md](preview_api.md). GIF and MP4 also require `atomaestro[animation]`.
 One `GpuSession` draws the whole animation, with at most one frame in flight.
 Ball and ball-and-stick frames that are already `FrameBatch` arrays, and that
 do not request a display mode, labels, axes, groups, overlays, topology, or

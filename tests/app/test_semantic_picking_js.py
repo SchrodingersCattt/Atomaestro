@@ -38,10 +38,38 @@ def test_hover_and_context_menu_have_no_server_coordinate_fallback():
     assert "FRAME_SETTLE_MS" in select
     assert "selectionAttemptCurrent(token, scene, generation)" in select
     assert "__mvGraphGeneration" not in select
-    pointerdown = controller[controller.index('addEventListener("pointerdown"'):controller.index("function select(")]
+    pointerdown = controller[controller.index('addEventListener("pointerdown"'):controller.index('addEventListener("mousedown"')]
     assert "generation:currentSceneGeneration()" in pointerdown
     assert "attempt:selectionAttemptToken" in pointerdown
+    assert "e.detail" not in pointerdown
+    mousedown = controller[controller.index('addEventListener("mousedown"'):controller.index("function isDoubleClick(")]
+    assert "mouseDetail" in mousedown
+    assert "e.detail" in mousedown
     assert "select(e, gesture)" in pointerup
+    assert "MatterVisDoubleClick" in controller
+    assert "isDoubleClick" in select
+    assert "mouseDetail>=2" in controller
+    assert "willChange" in controller
+
+
+def test_selection_outline_does_not_wait_on_an_unchanged_gutter():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node required for selection pointer contracts")
+    result = subprocess.run(
+        [
+            node,
+            str(ROOT / "tests/app/selection_pointer_contract.js"),
+            str(ROOT / "frontend/assets/panel_resize.js"),
+            str(ROOT / "frontend/assets/selection_appearance.js"),
+            str(ROOT / "frontend/assets/mattervis.js"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
 
 
 def test_appearance_undo_rejects_obsolete_target_revision():

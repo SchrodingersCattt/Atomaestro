@@ -2792,7 +2792,16 @@
     }
     if (container.dataset.rcmBound === "1") return;
     container.dataset.rcmBound="1";
-    let down=null,secondary=null,pendingContext=false,frame=null,lastCycle=null,cycle=0,ignoreClick=false;
+    let down=null,secondary=null,pendingContext=false,frame=null,lastCycle=null,cycle=0,ignoreClick=false,lastPrimary=null;
+    // Pointer events keep detail at 0 (Pointer Events: detail SHOULD be 0).
+    // The platform click count arrives on the mousedown that follows
+    // pointerdown and precedes pointerup. When that mouse event has not
+    // been dispatched yet, the same stationary window is the fallback.
+    // 500 ms and 4 px are the common platform defaults and the click slop
+    // already used to separate a click from a drag. #343 installs
+    // MatterVisDoubleClick.promote on this gesture.
+    const DOUBLE_CLICK_MS=500;
+    const DOUBLE_CLICK_SLOP_PX=4;
     function ignored(e) {return e.target && e.target.closest && e.target.closest(".mv-canvas-toolbar,.modebar,.rightclick-menu,.mv-appearance");}
     function resolve(e,cycling) {
       const gd=graphDiv();
@@ -2828,18 +2837,107 @@
       if(e.button===2){secondary={x:e.clientX,y:e.clientY,scene:currentSceneId(),moved:false};pendingContext=false;return;}
       secondary=null;pendingContext=false;
       if(e.button!==0) return;
-      selectionAttemptToken+=1;
-      down={x:e.clientX,y:e.clientY,scene:currentSceneId(),generation:currentSceneGeneration(),attempt:selectionAttemptToken,moved:false};
+      const scene=currentSceneId();
+      // Pointer events do not carry the click count. A second press that is
+      // still inside the fallback window must not cancel the first attempt
+      // before mousedown reports the platform click count.
+      const predicted=plainPrimary(e) && nearLastPrimary(e, scene);
+      if(!predicted) selectionAttemptToken+=1;
+      down={x:e.clientX,y:e.clientY,scene:scene,generation:currentSceneGeneration(),attempt:selectionAttemptToken,moved:false,mouseDetail:0,predicted:predicted};
     },{passive:true});
+    container.addEventListener("mousedown",function(e){
+      if(!down || e.button!==0) return;
+      down.mouseDetail=Number(e.detail)||0;
+      // Shift, Ctrl, and Alt stay on the add, toggle, and cycle paths.
+      if(!plainPrimary(e)) return;
+      if(down.mouseDetail>=2 && !down.predicted){
+        if(selectionAttemptToken===down.attempt) selectionAttemptToken-=1;
+        down.attempt=selectionAttemptToken;
+        down.predicted=true;
+      } else if(down.predicted && down.mouseDetail===1){
+        selectionAttemptToken+=1;
+        down.attempt=selectionAttemptToken;
+        down.predicted=false;
+      }
+    },true);
     function publishWhenGutterReady(target, mode) {
       const opening = mode !== "clear" && !!target;
       const dock = window.MatterVisSelectionDock;
-      const run = function () { publishSemanticSelection(target, mode); };
-      if (!dock || typeof dock.afterGutter !== "function") { run(); return; }
-      dock.afterGutter(opening, run);
+      const moving = !!(dock && typeof dock.willChange === "function" && dock.willChange(opening));
+      // A hit paints against the viewport the pointer sampled. The open
+      // transition still refits the canvas, then re-projects that same
+      // selection. It does not delay the first paint, and it does not
+      // hit-test again: the content box shifts under the original pixel.
+      // A clear still waits for a real close so the next pick samples the
+      // settled viewport. The plotly selection traces drop immediately.
+      if (!target || mode === "clear") {
+        clearSelectionOutline();
+        const finish = function () { publishSemanticSelection(null, "clear"); };
+        if (!moving || !dock || typeof dock.afterGutter !== "function") { finish(); return; }
+        dock.afterGutter(false, finish);
+        return;
+      }
+      publishSemanticSelection(target, mode);
+      if (!moving || !dock || typeof dock.afterGutter !== "function") return;
+      const scene = currentSceneId();
+      const generation = currentSceneGeneration();
+      dock.afterGutter(true, function () {
+        if (String(scene || "") !== String(currentSceneId() || "")) return;
+        if (String(generation || "") !== currentSceneGeneration()) return;
+        const gd = graphDiv();
+        if (!gd || !window.MatterVisScenePicking) return;
+        window.MatterVisScenePicking.invalidate(gd);
+        window.MatterVisScenePicking.paint(gd, persistentTargetsForScene(scene), null);
+      });
+    }
+    function plainPrimary(e){
+      return (e.button===0 || e.button===undefined) && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey;
+    }
+    function nearLastPrimary(e, scene){
+      const prior=lastPrimary;
+      if(!prior) return false;
+      if(String(prior.scene||"")!==String(scene||"")) return false;
+      if(Date.now()-prior.t>DOUBLE_CLICK_MS) return false;
+      return Math.hypot(e.clientX-prior.x, e.clientY-prior.y)<=DOUBLE_CLICK_SLOP_PX;
+    }
+    function isDoubleClick(e, gesture){
+      // mouseDetail is the mousedown click count. PointerEvent.detail is
+      // not a click count and is ignored. A count of 1 is a new click even
+      // inside the fallback window. A missing count uses that window.
+      if(!plainPrimary(e)) return false;
+      const mouseDetail=gesture && Number(gesture.mouseDetail)||0;
+      if(mouseDetail>=2) return true;
+      if(mouseDetail===1) return false;
+      return !!(gesture && gesture.predicted);
+    }
+    function offerDoubleClick(e, gesture, target) {
+      // The second press is the gesture, not a replace-mode miss. #343
+      // installs MatterVisDoubleClick.promote and publishes a molecule or
+      // disorder PART through MatterVisSemantic.select. The return value
+      // is ignored: this path never clears or replaces after the hook.
+      const scene = gesture && gesture.scene !== undefined && gesture.scene !== null ? gesture.scene : currentSceneId();
+      const hook = window.MatterVisDoubleClick;
+      if (!hook || typeof hook.promote !== "function") return;
+      try {
+        hook.promote({
+          clientX: e.clientX,
+          clientY: e.clientY,
+          scene: scene,
+          generation: gesture && gesture.generation,
+          target: target || null,
+          previous: persistentTargetsForScene(scene).slice(),
+        });
+      } catch (err) { /* a promotion failure must not clear the first press */ }
     }
     function select(e, gesture){
       const mode=e.ctrlKey||e.metaKey?"toggle":e.shiftKey?"add":"replace";
+      // A platform double-click is one gesture. Returning here skips both
+      // replace-mode publication and the in-flight-relayout resample, so a
+      // miss cannot clear the first press against the shifted content box.
+      if(isDoubleClick(e, gesture) && mode==="replace"){
+        offerDoubleClick(e, gesture, resolve(e, false));
+        return;
+      }
       const started=Date.now();
       // A selection edit rebuilds the figure. While that frame is still
       // landing, the same pixel can miss and must not wipe the set. The
@@ -2877,6 +2975,17 @@
         if(!selectionAttemptCurrent(token, scene, generation)) return;
         // Empty space clears only a plain click. Shift/Ctrl keep the set
         // when the pointer is not on a target. An unready index does not clear.
+        // A ready index during a gutter relayout is not empty space yet: the
+        // content box is moving under the pixel. Sample once more after it
+        // settles. A double-click never reaches this clear.
+        const resizeApi=window.MatterVisPanelResize;
+        if(!unready && mode==="replace" && resizeApi && typeof resizeApi.busy==="function" && resizeApi.busy() && Date.now()-started<FRAME_SETTLE_MS){
+          const pending=typeof resizeApi.whenSceneSized==="function" ? resizeApi.whenSceneSized() : Promise.resolve();
+          Promise.resolve(pending).then(function(){
+            if(selectionAttemptCurrent(token, scene, generation)) requestAnimationFrame(attempt);
+          });
+          return;
+        }
         if(!unready && mode==="replace") apply(null);
       }
       attempt();
@@ -2886,10 +2995,12 @@
       if(!down) return;
       const gesture=down;down=null;ignoreClick=true;
       setTimeout(function(){ignoreClick=false;},0);
-      if(ignored(e) || gesture.moved || Math.hypot(e.clientX-gesture.x,e.clientY-gesture.y)>4 ||
+      if(ignored(e) || gesture.moved || Math.hypot(e.clientX-gesture.x,e.clientY-gesture.y)>DOUBLE_CLICK_SLOP_PX ||
           gesture.scene!==currentSceneId()) return;
       // The plot node can be replaced between pointerdown and pointerup.
       // The scene is unchanged, so the click still belongs to this gesture.
+      if(plainPrimary(e) && !isDoubleClick(e, gesture))
+        lastPrimary={x:e.clientX,y:e.clientY,t:Date.now(),scene:gesture.scene};
       select(e, gesture);
     });
     container.addEventListener("pointercancel",function(){down=null;secondary=null;pendingContext=false;invalidateSemanticHover();paint();});

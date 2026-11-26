@@ -693,10 +693,7 @@ click after that record is an ordinary capture. A scene-tab control sync
 that lands after a later edit is dropped; the tab's own sync still applies
 while its epoch is current. A complete frame for the newly selected scene
 stays parked until that control stamp names the scene, so the canvas the
-page treats as current already has that scene's sidebar. The selection dock reserves its gutter and finishes the canvas refit
-before a pick becomes the observable selection. Escape clears the outline
-immediately, and the server clear is written only after that same relayout
-has settled, so the next pick uses the settled viewport.
+page treats as current already has that scene's sidebar. The selection dock reserves its gutter when the column width actually changes. A hit paints its outline on the viewport the pointer sampled, without waiting for a width/height relayout when that column is already the right width. An open or close still refits the canvas. The outline is painted first and re-projected after the relayout settles. Escape and an empty-space clear drop the plot selection traces immediately, and the server clear is written only after that close relayout has settled, so the next pick uses the settled viewport.
 
 ## Stable UI element IDs
 

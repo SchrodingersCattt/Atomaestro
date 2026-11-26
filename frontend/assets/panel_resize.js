@@ -135,12 +135,17 @@
     // CSS transitions settle before Plotly recalculates the 3-D viewport.
     // A width/height relayout is a full gl3d replot, so a second call waits
     // until that promise settles instead of clearing Plotly's queue.
+    // A measurement that already matches the settled content box must not
+    // arm that follow-up. whenSceneSized would otherwise wait out a no-op
+    // frame even though Plotly has nothing to replot.
     if (resizingScene) {
       resizeAgain = true;
       return;
     }
+    const settledKey = lastGraphRect;
     resizeSceneNow();
     if (resizeFrame || !window.requestAnimationFrame) return;
+    if (!resizingScene && !resizeAgain && lastGraphRect === settledKey) return;
     resizeFrame = window.requestAnimationFrame(function () {
       resizeFrame = 0;
       resizeSceneNow();
@@ -149,9 +154,9 @@
   }
 
   function whenSceneSized() {
-    // Resolves once the in-flight width/height relayout and its follow-up
-    // frame have both finished. A pick published earlier than that is
-    // measured against a viewport the relayout is about to replace.
+    // Resolves once an in-flight width/height relayout and its follow-up
+    // frame have both finished. An open/close re-projects after this.
+    // A content box that did not change never arms the wait.
     if (!sceneResizeBusy()) return Promise.resolve();
     return new Promise(function (resolve) {
       settleWaiters.push(resolve);
@@ -515,5 +520,6 @@
     fitPanels: fitPanels,
     resizeScene: resizeScene,
     whenSceneSized: whenSceneSized,
+    busy: sceneResizeBusy,
   };
 })();

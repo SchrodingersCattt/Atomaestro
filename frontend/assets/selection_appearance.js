@@ -52,6 +52,17 @@
     if(bar && bar.style) bar.style.right=open ? width+'px' : '';
     if(log && log.style) log.style.right=open ? (width+14)+'px' : '';
   }
+  function gutterColumnWidth(){
+    return Math.min(dockWidth(), Math.round((window.innerWidth||800)*0.4));
+  }
+  function gutterPadding(open){
+    return open ? gutterColumnWidth()+'px' : '';
+  }
+  function willChange(open){
+    const center=document.getElementById('center-panel');
+    if(!center || !center.style) return false;
+    return (center.style.paddingRight||'') !== gutterPadding(!!open);
+  }
   function layoutDock(){
     if(!panel) return;
     const center=document.getElementById('center-panel');
@@ -61,7 +72,7 @@
       teardownDockWatch();
     }
     const open=!panel.hidden && !!center && typeof center.getBoundingClientRect==='function';
-    const width=Math.min(dockWidth(), Math.round((window.innerWidth||800)*0.4));
+    const width=gutterColumnWidth();
     placeChrome(open, width);
     if(!open) return;
     const rect=center.getBoundingClientRect();
@@ -106,11 +117,14 @@
     if(graph && typeof graph.appendChild==='function' && next.parentElement!==graph) graph.appendChild(next);
   }
   function reserveGutter(open){
-    // Claim the column before the selection is observable. The canvas
-    // relayout that follows a padding change moves projected hits; a pick
-    // recorded against the previous box misses once that relayout lands.
-    const width=Math.min(dockWidth(), Math.round((window.innerWidth||800)*0.4));
-    placeChrome(!!open, width);
+    // Claim the column only when its width is about to change. The canvas
+    // relayout that follows a padding change moves projected hits, so the
+    // open/close transition still reports when that relayout has settled.
+    // An unchanged column must not schedule the relayout: the follow-up
+    // frame would block the caller even though the content box is stable.
+    const changed=willChange(open);
+    placeChrome(!!open, gutterColumnWidth());
+    if(!changed) return Promise.resolve();
     const api=window.MatterVisPanelResize;
     if(api && typeof api.resizeScene==='function') api.resizeScene();
     if(api && typeof api.whenSceneSized==='function') return api.whenSceneSized();
@@ -123,7 +137,7 @@
     if(pending && typeof pending.then==='function') pending.then(function(){done();}, function(){done();});
     else done();
   }
-  root.MatterVisSelectionDock={teardown:teardownDockWatch, layout:layoutDock, reserve:reserveGutter, afterGutter:afterGutter};
+  root.MatterVisSelectionDock={teardown:teardownDockWatch, layout:layoutDock, reserve:reserveGutter, afterGutter:afterGutter, willChange:willChange};
   function refitDock(){
     layoutDock();
     const run=function(){
@@ -138,12 +152,11 @@
     const shown=!!(panel && !panel.hidden);
     if(shown===dockShown){layoutDock();return;}
     dockShown=shown;
-    // reserve() already set this padding and waited for the relayout. A
-    // second refit after the selection is observable would move the next
-    // pick's pixels.
+    // reserve() sets this padding in the same turn as the pick, before
+    // the appearance response renders. A second refit would move the
+    // next pick's pixels.
     const center=document.getElementById('center-panel');
-    const width=Math.min(dockWidth(), Math.round((window.innerWidth||800)*0.4));
-    const expected=shown ? width+'px' : '';
+    const expected=gutterPadding(shown);
     const reserved=!!(center && center.style && (center.style.paddingRight||'')===expected);
     if(reserved){layoutDock();return;}
     refitDock();

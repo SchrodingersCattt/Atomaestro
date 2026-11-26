@@ -101,6 +101,13 @@ def register_state_callbacks(app, backend):
     def click_to_select_fragment(
         click_data, scene_id, display_mode, display_options, figure
     ):
+        """Point the analysis fragment dropdown at the clicked atom.
+
+        Semantic selection and the outline belong to the browser pointer
+        controller. This Plotly ``clickData`` callback keeps writing
+        ``topology-site-index`` only. Publishing ``scene-selection-store``
+        from here would race that controller.
+        """
         if not click_data or not click_data.get("points"):
             return no_update
         layout = (figure or {}).get("layout") if isinstance(figure, dict) else None

@@ -2828,18 +2828,66 @@
       if(e.button===2){secondary={x:e.clientX,y:e.clientY,scene:currentSceneId(),moved:false};pendingContext=false;return;}
       secondary=null;pendingContext=false;
       if(e.button!==0) return;
-      selectionAttemptToken+=1;
-      down={x:e.clientX,y:e.clientY,scene:currentSceneId(),generation:currentSceneGeneration(),attempt:selectionAttemptToken,moved:false};
+      // A second press inside the platform double-click count must not
+      // cancel the first attempt. Cancelling it lets a moving gutter sample
+      // as a miss and clear the set.
+      const continuation=Number(e.detail)>=2;
+      if(!continuation) selectionAttemptToken+=1;
+      down={x:e.clientX,y:e.clientY,scene:currentSceneId(),generation:currentSceneGeneration(),attempt:selectionAttemptToken,moved:false,detail:Number(e.detail)||0};
     },{passive:true});
     function publishWhenGutterReady(target, mode) {
       const opening = mode !== "clear" && !!target;
       const dock = window.MatterVisSelectionDock;
-      const run = function () { publishSemanticSelection(target, mode); };
-      if (!dock || typeof dock.afterGutter !== "function") { run(); return; }
-      dock.afterGutter(opening, run);
+      const moving = !!(dock && typeof dock.willChange === "function" && dock.willChange(opening));
+      // A hit paints against the viewport the pointer sampled. The open
+      // transition still refits the canvas, then re-projects that same
+      // selection. It does not delay the first paint, and it does not
+      // hit-test again: the content box shifts under the original pixel.
+      // A clear still waits for a real close so the next pick samples the
+      // settled viewport. The plotly selection traces drop immediately.
+      if (!target || mode === "clear") {
+        clearSelectionOutline();
+        const finish = function () { publishSemanticSelection(null, "clear"); };
+        if (!moving || !dock || typeof dock.afterGutter !== "function") { finish(); return; }
+        dock.afterGutter(false, finish);
+        return;
+      }
+      publishSemanticSelection(target, mode);
+      if (!moving || !dock || typeof dock.afterGutter !== "function") return;
+      const scene = currentSceneId();
+      const generation = currentSceneGeneration();
+      dock.afterGutter(true, function () {
+        if (String(scene || "") !== String(currentSceneId() || "")) return;
+        if (String(generation || "") !== currentSceneGeneration()) return;
+        const gd = graphDiv();
+        if (!gd || !window.MatterVisScenePicking) return;
+        window.MatterVisScenePicking.invalidate(gd);
+        window.MatterVisScenePicking.paint(gd, persistentTargetsForScene(scene), null);
+      });
+    }
+    function offerDoubleClick(e, gesture, target) {
+      // The second press is the gesture, not a replace-mode miss. #343
+      // installs MatterVisDoubleClick.promote and publishes a molecule or
+      // disorder PART through MatterVisSemantic.select. The return value
+      // is ignored: this path never clears or replaces after the hook.
+      const scene = gesture && gesture.scene !== undefined && gesture.scene !== null ? gesture.scene : currentSceneId();
+      const hook = window.MatterVisDoubleClick;
+      if (!hook || typeof hook.promote !== "function") return;
+      try {
+        hook.promote({
+          clientX: e.clientX,
+          clientY: e.clientY,
+          scene: scene,
+          generation: gesture && gesture.generation,
+          target: target || null,
+          previous: persistentTargetsForScene(scene).slice(),
+        });
+      } catch (err) { /* a promotion failure must not clear the first press */ }
     }
     function select(e, gesture){
       const mode=e.ctrlKey||e.metaKey?"toggle":e.shiftKey?"add":"replace";
+      const detail=Number((gesture && gesture.detail) || e.detail || 0);
+      const continuation=detail >= 2 && mode==="replace" && !e.altKey;
       const started=Date.now();
       // A selection edit rebuilds the figure. While that frame is still
       // landing, the same pixel can miss and must not wipe the set. The
@@ -2854,6 +2902,7 @@
       const scene=gesture && gesture.scene!==undefined && gesture.scene!==null ? gesture.scene : currentSceneId();
       const generation=gesture && gesture.generation!==undefined && gesture.generation!==null ? gesture.generation : currentSceneGeneration();
       function apply(target){
+        if(continuation){offerDoubleClick(e, gesture, target);return;}
         publishWhenGutterReady(target, target?mode:"clear");
       }
       function rendering(){
@@ -2877,6 +2926,17 @@
         if(!selectionAttemptCurrent(token, scene, generation)) return;
         // Empty space clears only a plain click. Shift/Ctrl keep the set
         // when the pointer is not on a target. An unready index does not clear.
+        // A ready index during a gutter relayout is not empty space yet: the
+        // content box is moving under the pixel. Sample once more after it
+        // settles. A double-click never reaches this clear.
+        const resizeApi=window.MatterVisPanelResize;
+        if(!unready && mode==="replace" && resizeApi && typeof resizeApi.busy==="function" && resizeApi.busy() && Date.now()-started<FRAME_SETTLE_MS){
+          const pending=typeof resizeApi.whenSceneSized==="function" ? resizeApi.whenSceneSized() : Promise.resolve();
+          Promise.resolve(pending).then(function(){
+            if(selectionAttemptCurrent(token, scene, generation)) requestAnimationFrame(attempt);
+          });
+          return;
+        }
         if(!unready && mode==="replace") apply(null);
       }
       attempt();

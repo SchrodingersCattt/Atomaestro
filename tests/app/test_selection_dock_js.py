@@ -119,7 +119,7 @@ async function flush() {
     assert result.returncode == 0, result.stderr or result.stdout
 
 
-def test_gutter_reserve_publishes_only_after_the_relayout_settles():
+def test_gutter_settle_waits_only_when_the_column_changes():
     node = shutil.which("node")
     if node is None:
         pytest.skip("Node.js is needed to execute the frontend regression")
@@ -200,11 +200,14 @@ assert.equal(typeof dock.afterGutter, 'function');
 let seen = null;
 let second = null;
 let relayoutsBeforeSecond = 0;
+assert.equal(typeof dock.willChange, 'function');
+assert.equal(dock.willChange(true), true);
 dock.afterGutter(true, function () { seen = geometry; });
 Promise.resolve().then(function () {
-  assert.equal(seen, null, 'the pick must wait for the gutter relayout');
+  assert.equal(seen, null, 'the open transition settles only after the relayout');
   assert.equal(relayouts, 1);
   assert.equal(center.style.paddingRight, '290px');
+  assert.equal(dock.willChange(true), false);
   releaseRelayout();
   return Promise.resolve();
 }).then(function () {
@@ -219,16 +222,22 @@ Promise.resolve().then(function () {
   assert.equal(geometry, '510x600');
   relayoutsBeforeSecond = relayouts;
   dock.afterGutter(true, function () { second = geometry; });
-  assert.equal(second, null);
+  assert.equal(second, null, 'an unchanged column settles on a microtask');
   assert.equal(relayouts, relayoutsBeforeSecond, 'a reserved gutter must not relayout again');
-  assert.equal(typeof frame, 'function');
-  const follow = frame;
-  frame = null;
-  follow();
+  assert.equal(frame, null, 'an unchanged column must not schedule a relayout frame');
   return Promise.resolve();
 }).then(function () {
   assert.equal(second, '510x600');
   assert.equal(relayouts, relayoutsBeforeSecond);
+  const api = sandbox.MatterVisPanelResize;
+  let settled = false;
+  const before = relayouts;
+  api.resizeScene();
+  api.whenSceneSized().then(function () { settled = true; });
+  assert.equal(frame, null, 'a settled content box must not arm a follow-up frame');
+  assert.equal(relayouts, before);
+  return Promise.resolve().then(function () { assert.equal(settled, true); });
+}).then(function () {
   process.exit(0);
 }).catch(function (error) {
   console.error(error);

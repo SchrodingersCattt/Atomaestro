@@ -59,13 +59,35 @@ All endpoints live under `/api/v2` and accept optional `scene_id`.
   the exact target under the pointer. `Esc` clears the set and closes the
   context menu. A plain click on empty scene space clears every target kind.
   A `Shift`/`Ctrl`/`Cmd` click that does not hit a target leaves the set
-  unchanged.   A click that arrives while a frame is still being applied waits
+  unchanged. A click that arrives while a frame is still being applied waits
   until that frame settles before the pointer is treated as empty space, so
   the replacement cannot erase the set the gesture is editing. The wait is
   bound to the scene id, the layout `scene_generation`, and the pointer
   attempt captured at pointerdown. A newer pointer, another scene, or a new
   scene generation cancels it and does not clear the set. The graph
   generation that advances while the frame settles does not cancel it.
+- The outline for a hit is painted on the viewport the pointer sampled.
+  When the Selection / Appearance column width is already reserved, that
+  paint does not wait for a width/height relayout. Opening the column still
+  refits the canvas after the first paint, then re-projects the same targets
+  once the relayout settles. That re-projection does not hit-test the
+  original pixel again. The content box shifts under that pixel, and the
+  identity of the first hit stays. A plain click that misses while a
+  width/height relayout is already in flight is sampled again after that
+  relayout, and it clears only if the settled viewport is still empty.
+- A second press the platform reports as a double-click (`detail >= 2` on
+  the pointer event, plain click without Alt) is one gesture. A miss does
+  not clear the set, and the press does not replace the first target.
+  `window.MatterVisDoubleClick.promote` may publish a wider target from that
+  gesture by calling `MatterVisSemantic.select`. The pointer controller
+  ignores the hook's return value and does not publish after it returns. A
+  missing hook, or a hook that throws, leaves the first press in place.
+  Molecule and disorder PART promotion is not performed here. The promote
+  payload is `{clientX, clientY, scene, generation, target, previous}`:
+  `target` is the second press's hit or `null`, and `previous` is the
+  selection after the first press.
+- Plotly `clickData` still updates the analysis fragment
+  (`topology-site-index`). It does not write the semantic selection.
 - A browser gesture carries a numeric `ts`. An older gesture does not
   overwrite a newer one for the same scene. Callers that omit `ts` still
   commit, which is how REST selection edits behave.
@@ -134,9 +156,14 @@ A viewport click opens **Selection / Appearance**. The inspector is a column
 beside the plot. `#mv-selection-appearance` is appended to `document.body`
 (or inside `#crystal-graph` when that host is unavailable). It is not an
 overlay on the plot. Opening it reserves `#center-panel` padding and refits
-the figure to the content box; closing it (clear, Esc, or a scene handoff)
-drops that padding and the status-bar and server-log offsets, then refits
-again. Atoms and bonds that remain in view stay on the canvas and can be
+the figure to the content box when that padding actually changes. A later
+pick while the column is already open does not schedule another gl3d
+relayout. Closing it (clear, Esc, or a scene handoff) drops that padding
+and the status-bar and server-log offsets, then refits again. Escape and an
+empty-space clear hide the plot selection traces immediately; the server
+clear is written after the close relayout settles, so the next pick uses
+the settled viewport. A hit's outline is visible before that open relayout
+finishes. Atoms and bonds that remain in view stay on the canvas and can be
 picked. Pointer events on the column do not reach the plot. The dock
 keeps one `ResizeObserver` and one window `resize` listener for the
 current `#center-panel`. Replacing that panel disconnects the previous

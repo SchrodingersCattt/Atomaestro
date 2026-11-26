@@ -84,7 +84,9 @@
           const c=camera.project(center),radius=(m.mv_bond_radii||[])[n]||0;
           const probes=[0,1,2].map(axis=>{const p=center.slice();p[axis]+=radius;return camera.project(p);});
           const pad=Math.max(POLICY.bondTolerance,...probes.filter(Boolean).map(q=>Math.hypot(q[0]-c[0],q[1]-c[1])));
-          add({type:'bond',a,b,pad,target,opacity:1},[Math.min(a[0],b[0])-pad,Math.min(a[1],b[1])-pad,Math.max(a[0],b[0])+pad,Math.max(a[1],b[1])+pad]);
+          const parents=(m.mv_parents||[])[n] || [];
+          target.metadata=Object.assign({},target.metadata,{parents});
+          add({type:'bond',a,b,pad,target,parents,opacity:1},[Math.min(a[0],b[0])-pad,Math.min(a[1],b[1])-pad,Math.max(a[0],b[0])+pad,Math.max(a[1],b[1])+pad]);
         });
       } else if(trace.type==='mesh3d' && ((m.face_ids && m.face_ids.length) || m.geometry_id || m.instance_id)) {
         const points=Array.from(trace.x,(_,n)=>camera.project(coord(n)));
@@ -175,5 +177,27 @@
     selected.forEach(t=>outline(t,POLICY.selectedWidth));
     if(hover && !selected.some(t=>key(t)===key(hover))) outline(hover,POLICY.hoverWidth);
   }
-  root.MatterVisScenePicking={hits,paint,index,projector,policy:POLICY,invalidate:gd=>cache.delete(gd)};
+  function listedParents(target, indexed) {
+    const direct=target && target.metadata && target.metadata.parents;
+    if (direct && direct.length) return direct;
+    if (!indexed || !target || !indexed.primitives) return [];
+    const want=key(target);
+    for (let i=0;i<indexed.primitives.length;i++) {
+      const primitive=indexed.primitives[i];
+      if (!primitive.target || key(primitive.target)!==want) continue;
+      if (primitive.parents && primitive.parents.length) return primitive.parents;
+      const nested=primitive.target.metadata && primitive.target.metadata.parents;
+      if (nested && nested.length) return nested;
+    }
+    return [];
+  }
+  // A disorder PART is the tighter parent. No parent leaves the clicked
+  // object selected; callers must not invent a scene-wide group.
+  function promotionTarget(target, indexed) {
+    const parents=listedParents(target, indexed);
+    for (let i=0;i<parents.length;i++) if (parents[i] && parents[i].kind==='part') return parents[i];
+    for (let i=0;i<parents.length;i++) if (parents[i] && parents[i].kind==='molecule') return parents[i];
+    return null;
+  }
+  root.MatterVisScenePicking={hits,paint,index,projector,policy:POLICY,promotionTarget,invalidate:gd=>cache.delete(gd)};
 })(window);

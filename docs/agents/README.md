@@ -99,6 +99,7 @@ The same routing as a quick table:
 | Read or override global Atomaestro defaults | [`config_api.md`](config_api.md) |
 | Select atoms/fragments in the live viewer and promote a selection to a group | [`selection_api.md`](selection_api.md) |
 | Pick visible atoms, bonds, polyhedron/mesh faces and BFDH facets; edit selected appearance with per-property inheritance | [`selection_api.md`](selection_api.md) |
+| Double-click an atom or bond to select its molecule instance or disorder PART, including that parent's visible bonds | [`selection_api.md`](selection_api.md) |
 
 ## Repo ownership for agents
 

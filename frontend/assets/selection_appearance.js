@@ -228,7 +228,7 @@
     const undoButton=node('button','Undo');undoButton.disabled=!history.some(r=>r.sceneId===sceneId);undoButton.onclick=()=>serialize(undo);
     const resetAll=node('button','Reset all local overrides');resetAll.onclick=()=>change({},true);
     panel.append(apply,document.createTextNode(' '),undoButton,document.createTextNode(' '),resetAll);
-    const hint=node('p','Alt-click cycles overlapping targets. Shift adds, Ctrl/Cmd toggles, Esc or empty space clears.');panel.appendChild(hint);
+    const hint=node('p','Double-click selects the molecule or disorder part. Alt-click cycles overlapping targets. Shift adds, Ctrl/Cmd toggles, Esc or empty space clears.');panel.appendChild(hint);
     const status=node('p');status.setAttribute('role','status');panel.appendChild(status);
   }
   root.addEventListener('mattervis-selection',event=>{

@@ -124,11 +124,76 @@ def atom_instance_id(atom: Mapping[str, Any], display_index: int | None = None) 
     return "atom:" + "|".join(parts)
 
 
+# Group 0, blank, and "." are ordered sites in CIF/SHELX. They remain in the
+# molecule and are not a disorder PART. An explicit ordered token blocks the
+# assembly-only fallback so a falsy 0 cannot be reread as a neighbouring field.
+_PART_GROUP_KEYS = (
+    "part",
+    "disorder_group",
+    "_disorder_group",
+    "disorder_part",
+    "_disorder_part",
+    "_mv_auto_disorder_group",
+    "dg",
+)
+_PART_ASSEMBLY_KEYS = ("disorder_assembly", "da")
+
+
+def _part_field(value: Any) -> tuple[str, str | None]:
+    """Classify one disorder field as absent, ordered, or a PART token."""
+
+    if value is None or isinstance(value, bool):
+        return "absent", None
+    if isinstance(value, (int, float)):
+        number = float(value)
+        if not math.isfinite(number) or number == 0.0:
+            return "ordered", None
+        return "part", _token(value)
+    text = _text(value)
+    if text in {"", ".", "?"}:
+        return "absent", None
+    if text in {"0", "0.0"}:
+        return "ordered", None
+    return "part", text
+
+
+def disorder_part_label(atom: Mapping[str, Any]) -> str | None:
+    """Return this atom's disorder PART label, or None when it has none.
+
+    Loader atoms carry the group on ``dg`` (and the assembly on ``da``).
+    Older payloads use ``part`` / ``disorder_group``. The first real group
+    wins. Group 0 is ordered membership, not a PART shared by every
+    undisordered site.
+    """
+
+    saw_ordered = False
+    for key in _PART_GROUP_KEYS:
+        if key not in atom:
+            continue
+        state, token = _part_field(atom.get(key))
+        if state == "part":
+            return token
+        if state == "ordered":
+            saw_ordered = True
+    if saw_ordered:
+        return None
+    for key in _PART_ASSEMBLY_KEYS:
+        if key not in atom:
+            continue
+        state, token = _part_field(atom.get(key))
+        if state == "part":
+            return token
+    return None
+
+
 def atom_parent_targets(atom: Mapping[str, Any], fragment_label: Any = None) -> list[dict[str, Any]]:
     """Use loader molecule membership, preserving image/symmetry/disorder scope.
 
     No connectivity is inferred here. A missing molecule/fragment means no
     selectable parent, rather than one accidental scene-wide anonymous group.
+    A disorder PART id is that molecule instance plus the part label, so two
+    molecules that reuse a part label stay distinct, and a complementary
+    PART of the same molecule has its own id.
     """
     molecule = atom.get("_source_molecule_index")
     if molecule is None:
@@ -141,10 +206,87 @@ def atom_parent_targets(atom: Mapping[str, Any], fragment_label: Any = None) -> 
     suffix = "|".join(token for token in suffix.split("|") if not token.startswith("disorder:"))
     molecule_id = f"molecule:{_token(molecule)}{suffix}"
     result = [{"kind": "molecule", "id": molecule_id, "label": str(fragment_label or molecule)}]
-    part = atom.get("part") or atom.get("disorder_group") or atom.get("disorder_assembly")
-    if part not in (None, "", "."):
-        result.append({"kind": "part", "id": f"{molecule_id}|part:{_token(part)}", "parent_id": molecule_id, "label": str(part)})
+    part = disorder_part_label(atom)
+    if part is not None:
+        result.append({
+            "kind": "part",
+            "id": f"{molecule_id}|part:{_token(part)}",
+            "parent_id": molecule_id,
+            "label": str(part),
+        })
     return result
+
+
+def bond_parent_targets(
+    bond: Mapping[str, Any],
+    atoms: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] | None = None,
+    fragment_labels: list[Any] | tuple[Any, ...] | None = None,
+) -> list[dict[str, Any]]:
+    """Return molecule/PART parents shared by a displayed bond.
+
+    Both endpoints must belong to the same molecule instance (same source
+    molecule, image, and symmetry scope). A bond belongs to a disorder PART
+    when one endpoint is in that PART and the other is either in the same
+    PART or has no PART of its own. The second case is the ordered atom a
+    disordered orientation is bonded to. Endpoints in different PARTs do
+    not publish a PART parent.
+    """
+
+    atoms = list(atoms or [])
+    try:
+        left = int(bond.get("i"))
+        right = int(bond.get("j"))
+    except (TypeError, ValueError):
+        return []
+    if not (0 <= left < len(atoms) and 0 <= right < len(atoms)):
+        return []
+
+    def fragment(index: int) -> Any:
+        if fragment_labels is None or index >= len(fragment_labels):
+            return None
+        return fragment_labels[index]
+
+    left_parents = atom_parent_targets(atoms[left], fragment(left))
+    right_parents = atom_parent_targets(atoms[right], fragment(right))
+    right_molecules = {item["id"]: item for item in right_parents if item["kind"] == "molecule"}
+    shared = [item for item in left_parents if item["kind"] == "molecule" and item["id"] in right_molecules]
+    if len(shared) != 1:
+        return []
+    result = [shared[0]]
+    left_parts = [item for item in left_parents if item["kind"] == "part"]
+    right_parts = [item for item in right_parents if item["kind"] == "part"]
+    if left_parts and right_parts:
+        agreed = [item for item in left_parts if any(item["id"] == other["id"] for other in right_parts)]
+        if len(agreed) == 1:
+            result.append(agreed[0])
+    elif len(left_parts) == 1 and not right_parts:
+        result.append(left_parts[0])
+    elif len(right_parts) == 1 and not left_parts:
+        result.append(right_parts[0])
+    return result
+
+
+def promoted_selection_parent(parents: Iterable[Mapping[str, Any]] | None) -> dict[str, Any] | None:
+    """Choose the parent a double-click promotes to.
+
+    A disorder PART is more specific than its molecule. An empty parent
+    list means the clicked object has no molecule membership; the caller
+    keeps that single object.
+    """
+
+    part = None
+    molecule = None
+    for parent in parents or []:
+        if not isinstance(parent, Mapping):
+            continue
+        kind = parent.get("kind")
+        if kind == "part" and part is None:
+            part = dict(parent)
+        elif kind == "molecule" and molecule is None:
+            molecule = dict(parent)
+    if part is not None:
+        return part
+    return molecule
 
 
 def legacy_atom_instance_id(

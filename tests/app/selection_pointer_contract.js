@@ -285,6 +285,7 @@ function list(value) { return Array.from(value || [], (item) => item); }
 function ids() { return list(selected()).map((item) => item.id); }
 
 (async function () {
+  const installedPromote = sandbox.window.MatterVisDoubleClick && sandbox.window.MatterVisDoubleClick.promote;
   runFrames();
   const loadedRelayouts = relayouts;
   center.style.paddingRight = '290px';
@@ -440,6 +441,40 @@ function ids() { return list(selected()).map((item) => item.id); }
   hit = {kind: 'atom', id: 'far'};
   pressStuffedPointerDetail(420, 420);
   assert.deepEqual(ids(), ['far'], 'pointer detail is not the click count when mousedown says this is a single click');
+
+  assert.equal(typeof installedPromote, 'function');
+  sandbox.window.MatterVisScenePicking.promotionTarget = function (target) {
+    const parents = (target && target.metadata && target.metadata.parents) || [];
+    const part = parents.find((item) => item && item.kind === 'part');
+    if (part) return part;
+    return parents.find((item) => item && item.kind === 'molecule') || null;
+  };
+  sandbox.window.MatterVisDoubleClick = {promote: installedPromote};
+  center.style.paddingRight = '290px';
+  hit = {kind: 'atom', id: 'seed', metadata: {parents: [
+    {kind: 'molecule', id: 'mol-water'},
+    {kind: 'part', id: 'mol-water|part:1'},
+  ]}};
+  press(1, 40, 220);
+  await settle();
+  assert.deepEqual(ids(), ['seed']);
+  hit = null;
+  pressPointerOnly(41, 221);
+  assert.deepEqual(ids(), ['mol-water|part:1'], 'a pointer detail of 0 promotes the first press through the hook');
+
+  hit = {kind: 'bond', id: 'plain-bond', metadata: {parents: [{kind: 'molecule', id: 'mol-only'}]}};
+  press(1, 200, 220);
+  await settle();
+  hit = null;
+  pressPointerOnly(201, 221);
+  assert.deepEqual(ids(), ['mol-only']);
+
+  hit = {kind: 'atom', id: 'orphan'};
+  press(1, 400, 220);
+  await settle();
+  hit = null;
+  pressPointerOnly(401, 221);
+  assert.deepEqual(ids(), ['orphan'], 'no molecule membership stays the single object');
 
   process.exit(0);
 })().catch(function (error) {

@@ -32,7 +32,7 @@ flowchart LR
         STRUCT["/upload, /structures, /scene/{name}"]
         OVERLAY["/polyhedra (+ instance_overrides)<br/>/atom_groups<br/>/bond_groups<br/>/transforms<br/>(+ supercell shorthand on /state)"]
         TOPO["/topology"]
-        EXPORT["/screenshot, /export, /export/cif,<br/>/preset/save, /preset/load"]
+        EXPORT["/screenshot, /preview, /export, /export/cif,<br/>/preset/save, /preset/load"]
         OBS["/healthz, /perf, /perf/clear"]
     end
 
@@ -596,6 +596,12 @@ Notes for callers:
   Removes a per-instance override and returns that polyhedron to the
   spec defaults. Both endpoints are documented in
   [`polyhedron_api.md`](polyhedron_api.md).
+- `POST /preview`, `GET /preview/image/<ticket>`, `GET /preview/activate/<ticket>`
+  Cached CPU or GPU raster for a structure the host supplies in the
+  body (`scene`, `cif`, or `xyz`), plus one Plotly document for that
+  same plan. This is not the open-tab screenshot and not the Matplotlib
+  exporter. Request fields, the camera convention, and the cache key are
+  in [`preview_api.md`](preview_api.md).
 - `GET /screenshot`
   Returns a PNG snapshot of the current Plotly view. Query parameters:
   `scene_id`, `width`, `height`, `scale`, `fast=true`, `at_version`,

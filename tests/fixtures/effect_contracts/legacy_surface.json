@@ -204,6 +204,38 @@
       "compatibility_test": "T01"
     },
     {
+      "id": "POST /api/v2/preview",
+      "surface": "rest",
+      "effect": "image-export",
+      "writes_structure": false,
+      "module": "v2_preview.py",
+      "compatibility_test": "T01"
+    },
+    {
+      "id": "GET /api/v2/preview/image/<ticket>",
+      "surface": "rest",
+      "effect": "image-export",
+      "writes_structure": false,
+      "module": "v2_preview.py",
+      "compatibility_test": "T01"
+    },
+    {
+      "id": "GET /api/v2/preview/activate/<ticket>",
+      "surface": "rest",
+      "effect": "image-export",
+      "writes_structure": false,
+      "module": "v2_preview.py",
+      "compatibility_test": "T01"
+    },
+    {
+      "id": "POST /api/v2/preview/activate",
+      "surface": "rest",
+      "effect": "image-export",
+      "writes_structure": false,
+      "module": "v2_preview.py",
+      "compatibility_test": "T01"
+    },
+    {
       "id": "POST /api/v2/preset/save",
       "surface": "rest",
       "effect": "session",

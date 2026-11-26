@@ -370,13 +370,39 @@ def build_figure(
     return figure
 
 
+def interactive_document(
+    figure: Any,
+    *,
+    include_plotlyjs: bool | str = True,
+) -> bytes:
+    """Complete interactive HTML document for one Plotly figure.
+
+    The default inlines Plotly.js so the file works offline. ``"directory"``
+    references a sibling ``plotly.min.js`` instead of embedding a second copy.
+    A CDN URL is not a mode of this writer.
+    """
+
+    if include_plotlyjs == "cdn":
+        raise ValueError(
+            "a complete interactive document loads Plotly.js inline or from "
+            "a local plotly.min.js; a CDN script is not a substitute"
+        )
+    from .html_export import _standalone_compass_script
+
+    _, pio = _plotly()
+    return pio.to_html(
+        figure,
+        include_plotlyjs=include_plotlyjs,
+        full_html=True,
+        post_script=_standalone_compass_script(),
+    ).encode("utf-8")
+
+
 def render(
     plan: RenderPlan,
     output: str | Path | None = None,
 ) -> RenderResult:
     """Render a plan through Plotly; failures are never sent to another backend."""
-    from .html_export import _standalone_compass_script
-
     _, pio = _plotly()
     path = Path(output).expanduser().resolve() if output is not None else None
     output_format = path.suffix.lower().lstrip(".") if path is not None else "html"
@@ -386,12 +412,7 @@ def render(
     scale = int(plan.metadata.get("scale", 1))
     try:
         if output_format == "html":
-            data = pio.to_html(
-                figure,
-                include_plotlyjs=True,
-                full_html=True,
-                post_script=_standalone_compass_script(),
-            ).encode("utf-8")
+            data = interactive_document(figure)
         else:
             data = pio.to_image(
                 figure,
@@ -434,4 +455,4 @@ def render(
     )
 
 
-__all__ = ["build_figure", "render"]
+__all__ = ["build_figure", "interactive_document", "render"]

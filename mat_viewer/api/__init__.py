@@ -10,6 +10,7 @@ from .v2_intent import register_intent_routes
 from .v2_overlays import register_overlay_routes
 from .v2_operate import register_operate_routes
 from .v2_perf import register_perf_routes
+from .v2_preview import register_preview_routes
 from .v2_scenes import register_scene_routes
 from .v2_selection import register_selection_routes
 from .v2_state import register_state_routes
@@ -29,6 +30,7 @@ def register_api(dash_app, backend) -> None:
         register_config_routes,
         register_selection_routes,
         register_export_routes,
+        register_preview_routes,
         register_intent_routes,
         register_overlay_routes,
         register_operate_routes,
